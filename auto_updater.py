@@ -11,6 +11,8 @@ import os
 import sys
 import shutil
 import socket
+import time
+import psutil
 from pathlib import Path
 from packaging import version
 from PyQt5.QtWidgets import QMessageBox, QProgressDialog, QApplication
@@ -43,8 +45,8 @@ class DownloadThread(QThread):
                         file.write(chunk)
                         downloaded += len(chunk)
                         if total_size > 0:
-                            progress = int((downloaded / total_size) * 100)
-                            self.progress.emit(progress)
+                            progress_value = int((downloaded / total_size) * 100)
+                            self.progress.emit(progress_value)
                             
             self.finished.emit(True, "ดาวน์โหลดสำเร็จ")
             
@@ -63,6 +65,8 @@ class AutoUpdater:
         self.version_url = "https://script.google.com/macros/s/AKfycbyzveWCcGt4GOQgVF8CUVF6I2Fzmz8x7Ds4BASTXPSh6VC1ErxTxv_KGjsaG7q4rNTLAw/exec"
         self.download_url = "https://github.com/tehnplk/exchange_unsen/raw/master/dist/ExchangeUnsen.exe"
         self.update_script = "update_app.bat"  # สำรอง fallback
+        self.progress_dialog = None
+        self.download_thread = None
         
     def check_internet_connection(self):
         """ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต"""
@@ -73,7 +77,7 @@ class AutoUpdater:
             return False
     
     def download_update(self):
-        """ดาวน์โหลดและติดตั้งอัปเดต"""
+        """ดาวน์โหลดและติดตั้งอัปเดต (เวอร์ชันเก่า - ไม่ใช้แล้ว)"""
         if not self.check_internet_connection():
             self._show_error_message("ไม่สามารถเชื่อมต่ออินเทอร์เน็ตได้\nกรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่")
             return False
@@ -192,6 +196,10 @@ class AutoUpdater:
             latest_version_data = max(version_data_list, key=lambda x: x.get('version_code', 0))
             latest_version = latest_version_data.get('version_name', '1.0.0')
             
+            # เก็บข้อมูลเวอร์ชันใหม่ไว้ใน parent
+            if self.parent:
+                self.parent.update_available_data = latest_version_data
+            
             # เปรียบเทียบเวอร์ชัน
             if self._is_newer_version(latest_version, self.current_version):
                 return self._show_update_dialog(latest_version_data)
@@ -211,6 +219,60 @@ class AutoUpdater:
         finally:
             self.__class__._update_check_in_progress = False
     
+    def check_for_updates_background(self, callback=None):
+        """
+        ตรวจสอบการอัปเดตแบบเบื้องหลัง (ไม่แสดง popup)
+        
+        Args:
+            callback (function): ฟังก์ชันที่จะเรียกเมื่อพบเวอร์ชันใหม่
+        """
+        # ป้องกันการเรียกตรวจสอบซ้ำ
+        if self.__class__._update_check_in_progress:
+            print("⚠️ Auto-update check already in progress, skipping...")
+            return False
+        
+        self.__class__._update_check_in_progress = True
+        
+        try:
+            # ดาวน์โหลดข้อมูลเวอร์ชันจาก Google Apps Script
+            response = requests.get(self.version_url, timeout=10)
+            response.raise_for_status()
+            
+            # response เป็น array, หาเวอร์ชันล่าสุด
+            version_data_list = response.json()
+            if not version_data_list or not isinstance(version_data_list, list):
+                return False
+            
+            # หาเวอร์ชันล่าสุดจาก version_code ที่สูงสุด
+            latest_version_data = max(version_data_list, key=lambda x: x.get('version_code', 0))
+            latest_version = latest_version_data.get('version_name', '1.0.0')
+            
+            # เก็บข้อมูลเวอร์ชันใหม่ไว้ใน parent
+            if self.parent:
+                self.parent.update_available_data = latest_version_data
+            
+            # เปรียบเทียบเวอร์ชัน
+            if self._is_newer_version(latest_version, self.current_version):
+                # พบเวอร์ชันใหม่ - เรียก callback
+                if callback:
+                    callback(latest_version_data)
+                elif self.parent and hasattr(self.parent, 'on_update_available'):
+                    self.parent.on_update_available(latest_version_data)
+                return True
+            else:
+                # ไม่มีเวอร์ชันใหม่ - ไม่ต้องแจ้งเตือน
+                return False
+                
+        except requests.exceptions.RequestException:
+            # ข้อผิดพลาดการเชื่อมต่อ - ไม่แจ้งเตือน
+            return False
+        except Exception as e:
+            # ข้อผิดพลาดอื่นๆ - ไม่แจ้งเตือน
+            print(f"Background update check error: {e}")
+            return False
+        finally:
+            self.__class__._update_check_in_progress = False
+
     def _is_newer_version(self, latest, current):
         """เปรียบเทียบเวอร์ชัน"""
         try:
@@ -233,7 +295,7 @@ class AutoUpdater:
 
 ต้องการดาวน์โหลดเวอร์ชันใหม่หรือไม่?
 
-หมายเหตุ: ไฟล์จะถูกดาวน์โหลดไปใน folder dist/"""
+หมายเหตุ: ไฟล์จะถูกดาวน์โหลดด้วยชื่อใหม่ (ไม่เขียนทับไฟล์เดิม)"""
         
         reply = QMessageBox.question(
             self.parent,
@@ -250,23 +312,21 @@ class AutoUpdater:
     def _start_update(self):
         """เริ่มกระบวนการอัปเดต"""
         try:
-            # ตรวจสอบว่ามี downloader.exe หรือไม่
-            downloader_path = "dist/downloader.exe"
-            if not os.path.exists(downloader_path):
-                # หาใน folder ปัจจุบัน
-                downloader_path = "downloader.exe"
-                if not os.path.exists(downloader_path):
-                    self._show_error_message("ไม่พบโปรแกรมดาวน์โหลด (downloader.exe)\nกรุณาติดต่อผู้พัฒนา")
-                    return False
+            # ดึงข้อมูลเวอร์ชันใหม่
+            if hasattr(self.parent, 'update_available_data') and self.parent.update_available_data:
+                latest_version_code = self.parent.update_available_data.get('version_code', 999)
+                latest_version_name = self.parent.update_available_data.get('version_name', 'unknown')
+            else:
+                self._show_error_message("ไม่พบข้อมูลเวอร์ชันใหม่\nกรุณาตรวจสอบการอัปเดตใหม่อีกครั้ง")
+                return False
+                
+            target_exe = f"ExchangeUnsen{latest_version_code}.exe"
             
-            # เตรียม arguments สำหรับ downloader
-            target_exe = "ExchangeUnsen.exe"
-            
-            # แสดงข้อความ
+            # แสดงข้อความยืนยัน
             reply = QMessageBox.question(
                 self.parent,
                 "เริ่มการอัปเดต",
-                f"จะเริ่มดาวน์โหลดเวอร์ชันใหม่\n\nโปรแกรมหลักจะปิดลงชั่วคราว\nโปรแกรมดาวน์โหลดจะจัดการส่วนที่เหลือ\n\nต้องการดำเนินการต่อหรือไม่?",
+                f"จะเริ่มดาวน์โหลดเวอร์ชันใหม่ {latest_version_name}\n\nไฟล์ใหม่จะถูกบันทึกเป็น: {target_exe}\nไฟล์เดิมจะไม่ถูกลบ\n\nต้องการดำเนินการต่อหรือไม่?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.Yes
             )
@@ -274,100 +334,183 @@ class AutoUpdater:
             if reply != QMessageBox.Yes:
                 return False
             
-            # รัน downloader.exe
-            try:
-                subprocess.Popen([
-                    downloader_path,
-                    self.download_url,
-                    target_exe
-                ])
-                
-                # ปิดโปรแกรมหลัก
-                QTimer.singleShot(1000, self._close_main_application)
-                
-                return True
-                
-            except Exception as e:
-                self._show_error_message(f"ไม่สามารถเรียกโปรแกรมดาวน์โหลดได้: {str(e)}")
-                return False
+            # เริ่มดาวน์โหลดด้วย progress dialog
+            return self._download_with_progress(self.download_url, target_exe, latest_version_name)
                 
         except Exception as e:
             self._show_error_message(f"เกิดข้อผิดพลาดในการอัปเดต: {str(e)}")
             return False
     
-    def _close_main_application(self):
-        """ปิดโปรแกรมหลัก"""
+    def _download_with_progress(self, download_url, target_exe_name, version_name):
+        """
+        ดาวน์โหลดไฟล์อัปเดตพร้อมแสดง QProgressDialog (Flow ใหม่)
+        """
+        if not self.check_internet_connection():
+            self._show_error_message("ไม่สามารถเชื่อมต่ออินเทอร์เน็ตได้\nกรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่")
+            return False
+
+        # Determine output directory (same as current executable or a 'downloads' subfolder)
         try:
-            if self.parent:
+            if getattr(sys, 'frozen', False):  # PyInstaller
+                output_dir = Path(sys.executable).parent
+            else:  # Running as script
+                output_dir = Path(__file__).parent
+        except Exception:
+            output_dir = Path(".")  # Fallback to current working directory
+
+        # Ensure output_dir exists (it should, but good practice)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        downloaded_file_path = output_dir / target_exe_name
+
+        self.progress_dialog = QProgressDialog(f"กำลังดาวน์โหลด {version_name}...", "ยกเลิก", 0, 100, self.parent)
+        self.progress_dialog.setWindowTitle(f"ดาวน์โหลด ExchangeUnsen {version_name}")
+        self.progress_dialog.setModal(True)
+        self.progress_dialog.setAutoClose(False)  # We will close it manually
+        self.progress_dialog.setAutoReset(False)  # We will reset it manually
+        self.progress_dialog.show()
+
+        self.download_thread = DownloadThread(download_url, str(downloaded_file_path))
+
+        def update_progress(value):
+            if self.progress_dialog:
+                self.progress_dialog.setValue(value)
+                if self.progress_dialog.wasCanceled():
+                    if hasattr(self, 'download_thread') and self.download_thread.isRunning():
+                        self.download_thread.terminate()
+                        self.progress_dialog.setLabelText("การดาวน์โหลดถูกยกเลิก...")
+                        if downloaded_file_path.exists():
+                            try:
+                                os.remove(downloaded_file_path)
+                                print(f"ลบไฟล์ที่ดาวน์โหลดไม่สมบูรณ์: {downloaded_file_path}")
+                            except Exception as e:
+                                print(f"ไม่สามารถลบไฟล์ที่ดาวน์โหลดไม่สมบูรณ์: {e}")
+                        
+        def download_finished(success, message):
+            if self.progress_dialog:
+                self.progress_dialog.close()
+                self.progress_dialog = None
+                
+            if not success:
+                self._show_error_message(f"ดาวน์โหลดล้มเหลว: {message}")
+                if downloaded_file_path.exists():
+                    try:
+                        os.remove(downloaded_file_path)
+                    except Exception:
+                        pass
+                return
+            
+            # แสดงข้อความสำเร็จและตำแหน่งไฟล์
+            self._show_download_success(target_exe_name, str(downloaded_file_path), version_name)
+        
+        self.download_thread.progress.connect(update_progress)
+        self.download_thread.finished.connect(download_finished)
+        self.download_thread.start()
+        
+        return True
+    
+    def _show_download_success(self, filename, filepath, version_name):
+        """แสดงข้อความเมื่อดาวน์โหลดสำเร็จ"""
+        message = f"""✅ ดาวน์โหลดสำเร็จ!
+
+เวอร์ชัน: {version_name}
+ชื่อไฟล์: {filename}
+ตำแหน่งไฟล์: {filepath}
+
+ไฟล์ใหม่พร้อมใช้งานแล้ว
+คุณสามารถปิดโปรแกรมเก่าและเปิดไฟล์ใหม่ได้เลย
+
+ต้องการปิดโปรแกรมตอนนี้หรือไม่?"""
+        
+        reply = QMessageBox.question(
+            self.parent,
+            "ดาวน์โหลดสำเร็จ",
+            message,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply == QMessageBox.Yes:
+            self._close_main_application()
+    
+    def _close_main_application(self):
+        """ปิดโปรแกรมหลักอย่างสมบูรณ์"""
+        try:
+            current_pid = os.getpid()
+            print(f"🔄 Attempting to close application (PID: {current_pid})")
+            
+            # ลองใช้ parent method ก่อน (graceful shutdown)
+            if self.parent and hasattr(self.parent, 'close_for_update'):
+                print("Calling parent.close_for_update()")
+                self.parent.close_for_update()  # Parent should handle its own cleanup and QApplication.quit()
+                # Give parent a moment to close gracefully
+                QTimer.singleShot(500, lambda: self._force_exit_if_not_closed(current_pid))
+                return  # Parent will handle exit
+            elif self.parent and hasattr(self.parent, 'close'):
+                print("Calling parent.close()")
                 self.parent.close()
+                QTimer.singleShot(500, lambda: self._force_exit_if_not_closed(current_pid))
+                return
+
+            # If no parent method, try direct psutil termination
+            self._force_exit_if_not_closed(current_pid)
+
+        except Exception as e_outer:
+            print(f"🛑 Outer error in _close_main_application: {e_outer}")
+            print("🛑 Forcing exit due to error in closing sequence.")
+            sys.exit(1)  # Force exit with error code
+
+    def _force_exit_if_not_closed(self, pid_to_check):
+        """Helper to force exit if process is still running."""
+        try:
+            if psutil.pid_exists(pid_to_check):
+                current_process = psutil.Process(pid_to_check)
+                print(f"⏳ Process {pid_to_check} still running. Attempting terminate/kill.")
+                current_process.terminate()
+                try:
+                    current_process.wait(timeout=0.5)  # Wait for termination
+                except psutil.TimeoutExpired:
+                    print(f"⚠️ Process {pid_to_check} did not terminate gracefully. Forcing kill...")
+                    current_process.kill()
+                    try:
+                        current_process.wait(timeout=0.2)  # Wait for kill
+                    except psutil.TimeoutExpired:
+                        print(f"🛑 Process {pid_to_check} could not be killed.")
+                    else:
+                        print(f"✅ Process {pid_to_check} killed.")
+                else:
+                    print(f"✅ Process {pid_to_check} terminated.")
             else:
-                QApplication.quit()
-        except:
-            sys.exit(0)
+                print(f"✅ Process {pid_to_check} already closed.")
+        except psutil.NoSuchProcess:
+            print(f"✅ Process {pid_to_check} not found (already closed).")
+        except Exception as e:
+            print(f"🛑 Error during force exit for PID {pid_to_check}: {e}")
+        finally:
+            print("Exiting application now.")
+            if QApplication.instance():  # Ensure Qt app quits
+                QApplication.instance().quit()
+            sys.exit(0)  # Ensure Python interpreter exits
     
     def _show_no_update_message(self):
         """แสดงข้อความเมื่อไม่มีอัปเดต"""
         QMessageBox.information(
             self.parent,
-            "ตรวจสอบอัปเดต",
-            f"คุณใช้เวอร์ชันล่าสุดแล้ว (v{self.current_version})"
+            "ไม่มีอัปเดต",
+            f"คุณกำลังใช้เวอร์ชันล่าสุดอยู่แล้ว ({self.current_version})"
         )
     
     def _show_connection_error(self):
-        """แสดงข้อความเมื่อเชื่อมต่ออินเทอร์เน็ตไม่ได้"""
+        """แสดงข้อความเมื่อเชื่อมต่อไม่ได้"""
         QMessageBox.warning(
             self.parent,
-            "ข้อผิดพลาด",
-            "ไม่สามารถเชื่อมต่ออินเทอร์เน็ตได้\nกรุณาตรวจสอบการเชื่อมต่อและลองใหม่"
+            "เชื่อมต่อไม่ได้",
+            "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตรวจสอบอัปเดตได้\nกรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต"
         )
-        
+    
     def _show_error_message(self, message):
-        """แสดงข้อความข้อผิดพลาด"""
+        """แสดงข้อความ error"""
         QMessageBox.critical(
             self.parent,
-            "ข้อผิดพลาด",
+            "เกิดข้อผิดพลาด", 
             message
         )
-
-class UpdateCheckThread(QThread):
-    """Thread สำหรับตรวจสอบอัปเดตแบบ async"""
-    update_available = pyqtSignal(dict)
-    
-    def __init__(self, version_url, current_version):
-        super().__init__()
-        self.version_url = version_url
-        self.current_version = current_version
-        
-    def run(self):
-        """ตรวจสอบอัปเดตในพื้นหลัง"""
-        try:
-            response = requests.get(self.version_url, timeout=10)
-            response.raise_for_status()
-            
-            version_data_list = response.json()
-            if version_data_list and isinstance(version_data_list, list):
-                # หาเวอร์ชันล่าสุด
-                latest_version_data = max(version_data_list, key=lambda x: x.get('version_code', 0))
-                latest_version = latest_version_data.get('version_name', '1.0.0')
-                
-                # เปรียบเทียบเวอร์ชัน
-                try:
-                    if version.parse(latest_version) > version.parse(self.current_version):
-                        self.update_available.emit(latest_version_data)
-                except:
-                    if latest_version != self.current_version:
-                        self.update_available.emit(latest_version_data)
-                        
-        except:
-            pass  # เงียบๆ ไม่แสดง error หากตรวจสอบไม่ได้
-
-def check_update_on_startup(parent=None, silent=True):
-    """
-    ฟังก์ชันสำหรับเรียกตรวจสอบอัปเดตเมื่อเปิดโปรแกรม
-    
-    Args:
-        parent: Parent widget สำหรับ dialog
-        silent: ถ้า True จะไม่แสดงข้อความเมื่อไม่มีอัปเดต
-    """
-    updater = AutoUpdater(parent)
-    return updater.check_for_updates(silent=silent)

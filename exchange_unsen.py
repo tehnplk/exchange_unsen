@@ -18,7 +18,7 @@ from ui_components import ExchangeUnsenUI
 
 # Import auto updater
 try:
-    from auto_updater import check_update_on_startup
+    from auto_updater import AutoUpdater
     AUTO_UPDATER_AVAILABLE = True
     print("✅ Auto updater module loaded successfully")
 except ImportError as e:
@@ -528,10 +528,13 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         
         # ตั้งค่า UI
         self.setupUi()
-        
-        # ตัวแปรสำหรับเก็บข้อมูล
+          # ตัวแปรสำหรับเก็บข้อมูล
         self.current_data = None
         self.current_file_path = None
+        
+        # ตัวแปรสำหรับจัดการอัปเดต
+        self.update_available_data = None
+        self.update_check_thread = None
         
         # Threads
         self.excel_loader_thread = None
@@ -555,10 +558,9 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         self.auto_connect_mysql()
           # ตั้งค่า tooltip เริ่มต้นสำหรับ status bar
         if hasattr(self, 'statusbar'):
-            self.statusbar.setToolTip("📊 แถบแสดงสถานะการทำงานของโปรแกรม")
-          # ตรวจสอบการอัปเดตอัตโนมัติเมื่อเริ่มต้น (หลัง 3 วินาที)
+            self.statusbar.setToolTip("📊 แถบแสดงสถานะการทำงานของโปรแกรม")          # ตรวจสอบการอัปเดตแบบเบื้องหลัง (หลัง 3 วินาที)
         if AUTO_UPDATER_AVAILABLE:
-            QTimer.singleShot(3000, self.check_for_updates_on_startup)
+            QTimer.singleShot(3000, self.check_for_updates_background)
         
     def setup_connections(self):
         """เชื่อมต่อ signals กับ functions"""        # ปุ่มต่างๆ
@@ -887,7 +889,6 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             self.browseButton.setEnabled(True) # ปุ่ม Browse ควรทำงานได้เสมอ
             self.exportButton.setEnabled(False)
             self.clearButton.setEnabled(False) # ปิดปุ่ม clear จนกว่าจะเลือกไฟล์ใหม่            self.searchPopulationButton.setEnabled(False)
-            
             self.update_status("ล้างข้อมูลเรียบร้อย - พร้อมใช้งาน")
             
     def update_status(self, message): # ฟังก์ชันนี้อาจจะไม่ถูกใช้โดยตรงแล้ว จะใช้ _update_status_and_progress แทน
@@ -896,29 +897,130 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
     
     def show_about(self):
         """แสดงข้อมูลเกี่ยวกับแอปพลิเคชัน"""
-        about_text = """
-ExchangeUnsen - Excel Reader App
-
-ฟีเจอร์หลัก:
-• อ่านและแสดงไฟล์ Excel
-• ค้นหาข้อมูลใน MySQL database
-• กรองข้อมูลในตาราง
-• ส่งออกข้อมูลเป็นไฟล์ Excel
-
-การใช้งานระบบกรอง:
-• คลิกขวาที่หัวคอลัมน์เพื่อเปิดเมนู
-• เลือก "กรองคอลัมน์" เพื่อตั้งค่าการกรอง
-• ใช้การค้นหาแบบ LIKE (ไม่คำนึงตัวพิมพ์ใหญ่-เล็ก)
-• สามารถกรองหลายคอลัมน์พร้อมกัน
-
-เคล็ดลับการใช้งาน:
-• วางเมาส์บนปุ่มหรือหัวคอลัมน์เพื่อดู tooltip
-• คลิกซ้ายที่หัวคอลัมน์เพื่อเรียงลำดับ
-• คลิกขวาที่หัวคอลัมน์เพื่อกรองข้อมูล
-
-Version: 1.0
-        """
-        QMessageBox.about(self, "เกี่ยวกับโปรแกรม", about_text.strip())
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QWidget
+        from PyQt5.QtCore import Qt
+        from PyQt5.QtGui import QFont
+        
+        # สร้าง dialog แบบกำหนดเอง
+        about_dialog = QDialog(self)
+        about_dialog.setWindowTitle("เกี่ยวกับโปรแกรม")
+        about_dialog.setFixedSize(400, 300)
+        about_dialog.setModal(True)
+        
+        # Layout หลัก
+        main_layout = QVBoxLayout(about_dialog)
+        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        
+        # ชื่อโปรแกรม
+        title_label = QLabel("ExchangeUnsen")
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title_label)
+        
+        # ข้อมูลเวอร์ชัน
+        version_info = f"""เวอร์ชันปัจจุบัน: {APP_CONFIG.get('version', '1.0.0')}
+รหัสเวอร์ชัน: {APP_CONFIG.get('version_code', 0)}
+วันที่ปล่อย: {APP_CONFIG.get('release', 'N/A')}"""
+        
+        version_label = QLabel(version_info)
+        version_label.setAlignment(Qt.AlignCenter)
+        version_label.setStyleSheet("""
+        QLabel {
+            background-color: #F5F5F5;
+            padding: 10px;
+            border: 1px solid #DDDDDD;
+            border-radius: 5px;
+        }
+        """)
+        main_layout.addWidget(version_label)
+        
+        # ข้อมูลอัปเดต (ถ้ามี)
+        if self.update_available_data:
+            latest_version = self.update_available_data.get('version_name', 'unknown')
+            update_info = f"""🆕 เวอร์ชันใหม่พร้อมใช้งาน: {latest_version}
+รหัสเวอร์ชัน: {self.update_available_data.get('version_code', 0)}
+วันที่ปล่อย: {self.update_available_data.get('release', 'N/A')}"""
+            
+            update_label = QLabel(update_info)
+            update_label.setAlignment(Qt.AlignCenter)
+            update_label.setStyleSheet("""
+            QLabel {
+                background-color: #E8F5E8;
+                color: #2E7D32;
+                padding: 10px;
+                border: 2px solid #4CAF50;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            """)
+            main_layout.addWidget(update_label)
+        
+        # Layout สำหรับปุ่ม
+        button_layout = QHBoxLayout()
+        
+        # ปุ่ม Update (แสดงเฉพาะเมื่อมีอัปเดต)
+        if self.update_available_data:
+            update_button = QPushButton("🔄 อัปเดตเลย")
+            update_button.setMinimumHeight(40)
+            update_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 10px 20px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+            """)
+            update_button.clicked.connect(lambda: self.start_update_from_dialog(about_dialog))
+            button_layout.addWidget(update_button)
+        
+        # ปุ่มปิด
+        close_button = QPushButton("ปิด")
+        close_button.setMinimumHeight(40)
+        close_button.setStyleSheet("""
+        QPushButton {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 12px;
+            padding: 10px 20px;
+        }
+        QPushButton:hover {
+            background-color: #5a6268;
+        }
+        """)
+        close_button.clicked.connect(about_dialog.close)
+        button_layout.addWidget(close_button)
+        
+        main_layout.addLayout(button_layout)
+        
+        # แสดง dialog
+        about_dialog.exec_()
+    
+    def start_update_from_dialog(self, dialog):
+        """เริ่มกระบวนการอัปเดตจาก dialog"""
+        dialog.close()
+        if AUTO_UPDATER_AVAILABLE:
+            try:
+                updater = AutoUpdater(parent=self)
+                updater.check_for_updates(silent=False)
+            except Exception as e:
+                QMessageBox.critical(self, "ข้อผิดพลาด", f"ไม่สามารถเริ่มการอัปเดตได้:\n{str(e)}")
+        else:
+            QMessageBox.warning(self, "ไม่พร้อมใช้งาน", "ระบบอัปเดตไม่พร้อมใช้งาน")
     
     def auto_connect_mysql(self):
         """เชื่อมต่อ MySQL อัตโนมัติถ้าตั้งค่าไว้"""
@@ -1577,40 +1679,78 @@ Version: 1.0
         sample_size = min(50, len(self.current_data))
         sample_data = self.current_data.iloc[:sample_size, logical_index].astype(str)
         max_content_width = max(len(str(val)) for val in sample_data) * 8 + 40
-        
-        # ใช้ค่าที่ใหญ่กว่า แต่จำกัดไม่เกิน 400px
+          # ใช้ค่าที่ใหญ่กว่า แต่จำกัดไม่เกิน 400px
         optimal_width = min(max(header_width, max_content_width, 100), 400)
         
         header.resizeSection(logical_index, optimal_width)
         
         # อัพเดท status ให้รู้ว่าทำการ resize แล้ว
         self.update_status(f"ปรับขนาดคอลัมน์ '{column_name}' เป็น {optimal_width}px")
-
+    
     def check_for_updates_on_startup(self):
-        """ตรวจสอบการอัปเดตเมื่อเริ่มต้นโปรแกรม"""
+        """ตรวจสอบการอัปเดตเมื่อเริ่มต้นโปรแกรม (แบบ background)"""
         try:
             if AUTO_UPDATER_AVAILABLE:
-                self.update_status("🔍 กำลังตรวจสอบการอัปเดต...")                # เรียกใช้ auto updater แบบแสดงการแจ้งเตือนเมื่อมีอัปเดต
-                check_update_on_startup(parent=self, silent=False)
+                # ตรวจสอบแบบ background ไม่แสดง popup
+                updater = AutoUpdater(parent=self)
+                updater.check_for_updates_background(callback=self.on_update_available)
             else:
-                self.update_status("⚠️ ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
-                
+                print("⚠️ ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
         except Exception as e:
             print(f"Warning: ไม่สามารถตรวจสอบการอัปเดตได้: {e}")
-            self.update_status("พร้อมใช้งาน")
     
     def manual_check_updates(self):
-        """ตรวจสอบการอัปเดตด้วยตนเอง"""
+        """ตรวจสอบการอัปเดตด้วยตนเอง (แสดง dialog)"""
         try:
             if AUTO_UPDATER_AVAILABLE:
                 self.update_status("🔍 กำลังตรวจสอบการอัปเดต...")
                 # เรียกใช้ auto updater แบบไม่ silent (แสดงข้อความเมื่อไม่มีอัปเดต)
-                check_update_on_startup(parent=self, silent=False)
+                updater = AutoUpdater(parent=self)
+                updater.check_for_updates(silent=False)
             else:
                 QMessageBox.warning(self, "ไม่พร้อมใช้งาน", "ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
                 
         except Exception as e:
             QMessageBox.critical(self, "ข้อผิดพลาด", f"ไม่สามารถตรวจสอบการอัปเดตได้:\n{str(e)}")
+    
+    def check_for_updates_background(self):
+        """ตรวจสอบการอัปเดตแบบเบื้องหลัง (ไม่แสดง popup)"""
+        try:
+            if AUTO_UPDATER_AVAILABLE:
+                # เรียกใช้ auto updater แบบเบื้องหลัง
+                updater = AutoUpdater(parent=self)
+                updater.check_for_updates_background(callback=self.on_update_available)
+            else:
+                print("⚠️ ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
+        except Exception as e:
+            print(f"Warning: ไม่สามารถตรวจสอบการอัปเดตได้: {e}")
+    
+    def on_update_available(self, version_data):
+        """เมื่อพบเวอร์ชันใหม่ - แสดงการแจ้งเตือนที่ status bar"""
+        self.update_available_data = version_data
+        latest_version = version_data.get('version_name', 'unknown')
+        version_code = version_data.get('version_code', 0)
+        
+        # อัปเดตสถานะให้แสดงข้อความแจ้งเตือน
+        update_message = f"🚀 มีเวอร์ชันใหม่ {latest_version} (รหัส: {version_code}) - คลิก 'เกี่ยวกับ' เพื่ออัปเดต"
+        self.update_status(update_message)
+        
+        # เปลี่ยนสีสถานะให้เด่นขึ้น (สีส้มสะดุดตา)
+        self.statusLabel.setStyleSheet("""
+        QLabel {
+            color: #FF6600;
+            padding: 8px;
+            background-color: #FFF3E0;
+            border: 2px solid #FF9800;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        """)
+        
+        # เก็บข้อมูลเวอร์ชันไว้สำหรับการอัปเดต
+        print(f"🆕 Found new version: {latest_version} (current: {APP_CONFIG.get('version', '1.0.0')})")
+
 
 def main():
     """ฟังก์ชันหลักสำหรับรันแอปพลิเคชัน"""
