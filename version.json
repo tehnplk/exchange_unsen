@@ -1,12 +1,12 @@
 {
   "name": "ExchangeUnsen",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "แอปพลิเคชันสำหรับอ่านไฟล์ Excel และเชื่อมโยงข้อมูลกับ MySQL",
   "author": "Python Developer",
-  "release_date": "2025-06-14",  "download_url": "https://github.com/kaebmoo/ExchangeUnsen/raw/main/ExchangeUnsen.exe",
-  "backup_url": "https://github.com/kaebmoo/ExchangeUnsen/raw/main/dist/ExchangeUnsen.exe",
-  "changelog_url": "https://github.com/kaebmoo/ExchangeUnsen/blob/main/CHANGELOG.md",
-  "repository_url": "https://github.com/kaebmoo/ExchangeUnsen",
+  "release_date": "2025-06-14",  "download_url": "https://github.com/tehnplk/exchange_unsen/raw/refs/heads/master/ExchangeUnsen.exe",
+  "backup_url": "https://github.com/tehnplk/exchange_unsen/raw/refs/heads/master/dist/ExchangeUnsen.exe",
+  "changelog_url": "https://github.com/tehnplk/exchange_unsen/blob/master/CHANGELOG.md",
+  "repository_url": "https://github.com/tehnplk/exchange_unsen",
   "minimum_version": "1.0.0",
   "update_required": false,
   "notes": [
