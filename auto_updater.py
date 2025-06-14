@@ -250,12 +250,60 @@ class AutoUpdater:
     def _start_update(self):
         """เริ่มกระบวนการอัปเดต"""
         try:
-            # ใช้ฟังก์ชัน Python download แทน bat file
-            return self.download_update()
+            # ตรวจสอบว่ามี downloader.exe หรือไม่
+            downloader_path = "dist/downloader.exe"
+            if not os.path.exists(downloader_path):
+                # หาใน folder ปัจจุบัน
+                downloader_path = "downloader.exe"
+                if not os.path.exists(downloader_path):
+                    self._show_error_message("ไม่พบโปรแกรมดาวน์โหลด (downloader.exe)\nกรุณาติดต่อผู้พัฒนา")
+                    return False
+            
+            # เตรียม arguments สำหรับ downloader
+            target_exe = "ExchangeUnsen.exe"
+            
+            # แสดงข้อความ
+            reply = QMessageBox.question(
+                self.parent,
+                "เริ่มการอัปเดต",
+                f"จะเริ่มดาวน์โหลดเวอร์ชันใหม่\n\nโปรแกรมหลักจะปิดลงชั่วคราว\nโปรแกรมดาวน์โหลดจะจัดการส่วนที่เหลือ\n\nต้องการดำเนินการต่อหรือไม่?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if reply != QMessageBox.Yes:
+                return False
+            
+            # รัน downloader.exe
+            try:
+                subprocess.Popen([
+                    downloader_path,
+                    self.download_url,
+                    target_exe
+                ])
+                
+                # ปิดโปรแกรมหลัก
+                QTimer.singleShot(1000, self._close_main_application)
+                
+                return True
+                
+            except Exception as e:
+                self._show_error_message(f"ไม่สามารถเรียกโปรแกรมดาวน์โหลดได้: {str(e)}")
+                return False
                 
         except Exception as e:
             self._show_error_message(f"เกิดข้อผิดพลาดในการอัปเดต: {str(e)}")
             return False
+    
+    def _close_main_application(self):
+        """ปิดโปรแกรมหลัก"""
+        try:
+            if self.parent:
+                self.parent.close()
+            else:
+                QApplication.quit()
+        except:
+            sys.exit(0)
     
     def _show_no_update_message(self):
         """แสดงข้อความเมื่อไม่มีอัปเดต"""
