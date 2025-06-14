@@ -20,7 +20,7 @@ class AutoUpdater:
     def __init__(self, parent=None):
         self.parent = parent
         self.current_version = APP_CONFIG.get('version', '1.0.0')
-        self.version_url = "https://raw.githubusercontent.com/tehnplk/exchange_unsen/master/version.json"
+        self.version_url = "https://script.google.com/macros/s/AKfycbyzveWCcGt4GOQgVF8CUVF6I2Fzmz8x7Ds4BASTXPSh6VC1ErxTxv_KGjsaG7q4rNTLAw/exec"
         self.update_script = "update_app.bat"
         
     def check_for_updates(self, silent=False):
@@ -31,16 +31,24 @@ class AutoUpdater:
             silent (bool): ถ้า True จะไม่แสดง popup เมื่อไม่มีอัปเดต
         """
         try:
-            # ดาวน์โหลดข้อมูลเวอร์ชันจาก GitHub
+            # ดาวน์โหลดข้อมูลเวอร์ชันจาก Google Apps Script
             response = requests.get(self.version_url, timeout=10)
             response.raise_for_status()
             
-            version_data = response.json()
-            latest_version = version_data.get('version', '1.0.0')
+            # response เป็น array, หาเวอร์ชันล่าสุด
+            version_data_list = response.json()
+            if not version_data_list or not isinstance(version_data_list, list):
+                if not silent:
+                    self._show_error_message("ข้อมูลเวอร์ชันไม่ถูกต้อง")
+                return False
+            
+            # หาเวอร์ชันล่าสุดจาก version_code ที่สูงสุด
+            latest_version_data = max(version_data_list, key=lambda x: x.get('version_code', 0))
+            latest_version = latest_version_data.get('version_name', '1.0.0')
             
             # เปรียบเทียบเวอร์ชัน
             if self._is_newer_version(latest_version, self.current_version):
-                return self._show_update_dialog(version_data)
+                return self._show_update_dialog(latest_version_data)
             else:
                 if not silent:
                     self._show_no_update_message()
@@ -64,18 +72,16 @@ class AutoUpdater:
     
     def _show_update_dialog(self, version_data):
         """แสดง dialog สำหรับถามการอัปเดต"""
-        latest_version = version_data.get('version', 'unknown')
-        notes = version_data.get('notes', [])
-        release_date = version_data.get('release_date', 'unknown')
+        latest_version = version_data.get('version_name', 'unknown')
+        release_date = version_data.get('release', 'unknown')
+        version_code = version_data.get('version_code', 0)
         
         message = f"""🚀 พบเวอร์ชันใหม่!
 
 เวอร์ชันปัจจุบัน: {self.current_version}
 เวอร์ชันใหม่: {latest_version}
 วันที่ปล่อย: {release_date}
-
-ความเปลี่ยนแปลง:
-{chr(10).join(f"• {note}" for note in notes)}
+รหัสเวอร์ชัน: {version_code}
 
 ต้องการอัปเดตเลยหรือไม่?"""
         
@@ -141,6 +147,37 @@ class AutoUpdater:
             message
         )
 
+    def post_new_version(self, version_name, version_code=None):
+        """
+        POST เวอร์ชันใหม่ไปยัง Google Apps Script
+        
+        Args:
+            version_name (str): ชื่อเวอร์ชัน เช่น "1.0.3"
+            version_code (int): รหัสเวอร์ชัน (อัตโนมัติถ้าไม่ระบุ)
+        """
+        try:
+            # ถ้าไม่ระบุ version_code ให้สร้างจากเวอร์ชัน
+            if version_code is None:
+                # แปลง "1.0.3" เป็น 103
+                parts = version_name.split('.')
+                version_code = int(''.join(parts))
+            
+            data = {
+                'version_name': version_name,
+                'version_code': version_code,
+                'action': 'add'  # หรือ parameter ที่ API ต้องการ
+            }
+            
+            response = requests.post(self.version_url, json=data, timeout=15)
+            response.raise_for_status()
+            
+            print(f"✅ อัปเดตเวอร์ชัน {version_name} สำเร็จ")
+            return True
+            
+        except Exception as e:
+            print(f"❌ เกิดข้อผิดพลาดในการอัปเดตเวอร์ชัน: {str(e)}")
+            return False
+
 class UpdateCheckThread(QThread):
     """Thread สำหรับตรวจสอบอัปเดตแบบไม่บล็อก UI"""
     
@@ -159,11 +196,18 @@ class UpdateCheckThread(QThread):
             response = requests.get(self.version_url, timeout=10)
             response.raise_for_status()
             
-            version_data = response.json()
-            latest_version = version_data.get('version', '1.0.0')
+            # response เป็น array, หาเวอร์ชันล่าสุด
+            version_data_list = response.json()
+            if not version_data_list or not isinstance(version_data_list, list):
+                self.error_occurred.emit("ข้อมูลเวอร์ชันไม่ถูกต้อง")
+                return
+            
+            # หาเวอร์ชันล่าสุดจาก version_code ที่สูงสุด
+            latest_version_data = max(version_data_list, key=lambda x: x.get('version_code', 0))
+            latest_version = latest_version_data.get('version_name', '1.0.0')
             
             if self._is_newer_version(latest_version, self.current_version):
-                self.update_available.emit(version_data)
+                self.update_available.emit(latest_version_data)
             else:
                 self.no_update.emit()
                 

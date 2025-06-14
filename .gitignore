@@ -24,16 +24,17 @@ venv/
 .Spotlight-V100
 .Trashes
 
-# PyInstaller Build Files (ignore all except final exe)
+# PyInstaller Build Files (ignore all except dist folder)
 build/
-dist/
-!dist/ExchangeUnsen.exe
+# dist/ - Allow dist folder for distribution
 *.spec
 *.log
 *.toc
 *.pyz
 *.exe
 !ExchangeUnsen.exe
+!dist/
+!dist/*
 *.pkg
 
 # Excel/CSV temporary files
@@ -48,7 +49,7 @@ dist/
 .Python
 build/
 develop-eggs/
-dist/
+# dist/ - Allow dist folder for distribution
 downloads/
 eggs/
 .eggs/
