@@ -4,8 +4,7 @@ Configuration file สำหรับ Excel Reader Application
 
 # การตั้งค่าแอปพลิเคชัน
 APP_CONFIG = {
-    'name': 'ExchangeUnsen',
-    'version': '1.0.4',
+    'name': 'ExchangeUnsen',    'version': '1.0.4',
     'version_code': 104,
     'release': '2025-06-14',
     'description': 'แอปพลิเคชันสำหรับอ่านไฟล์ Excel และเชื่อมโยงข้อมูลกับ MySQL',
