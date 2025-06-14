@@ -20,9 +20,10 @@ from ui_components import ExchangeUnsenUI
 try:
     from auto_updater import check_update_on_startup
     AUTO_UPDATER_AVAILABLE = True
-except ImportError:
+    print("✅ Auto updater module loaded successfully")
+except ImportError as e:
     AUTO_UPDATER_AVAILABLE = False
-    print("Warning: auto_updater module not available")
+    print(f"❌ Warning: auto_updater module not available: {e}")
 
 # Import configuration
 try:
@@ -555,13 +556,9 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
           # ตั้งค่า tooltip เริ่มต้นสำหรับ status bar
         if hasattr(self, 'statusbar'):
             self.statusbar.setToolTip("📊 แถบแสดงสถานะการทำงานของโปรแกรม")
-        
-        # ตรวจสอบการอัปเดตอัตโนมัติเมื่อเริ่มต้น (หลัง 3 วินาที)
+          # ตรวจสอบการอัปเดตอัตโนมัติเมื่อเริ่มต้น (หลัง 3 วินาที)
         if AUTO_UPDATER_AVAILABLE:
             QTimer.singleShot(3000, self.check_for_updates_on_startup)
-        # ตรวจสอบการอัปเดตอัตโนมัติเมื่อเริ่มต้น
-        if AUTO_UPDATER_AVAILABLE:
-            check_update_on_startup()
         
     def setup_connections(self):
         """เชื่อมต่อ signals กับ functions"""        # ปุ่มต่างๆ
@@ -1593,9 +1590,8 @@ Version: 1.0
         """ตรวจสอบการอัปเดตเมื่อเริ่มต้นโปรแกรม"""
         try:
             if AUTO_UPDATER_AVAILABLE:
-                self.update_status("🔍 กำลังตรวจสอบการอัปเดต...")
-                # เรียกใช้ auto updater แบบ silent (ไม่แสดงข้อความเมื่อไม่มีอัปเดต)
-                check_update_on_startup(parent=self, silent=True)
+                self.update_status("🔍 กำลังตรวจสอบการอัปเดต...")                # เรียกใช้ auto updater แบบแสดงการแจ้งเตือนเมื่อมีอัปเดต
+                check_update_on_startup(parent=self, silent=False)
             else:
                 self.update_status("⚠️ ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
                 
