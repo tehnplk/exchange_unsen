@@ -589,9 +589,8 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         
         # ตั้งค่าขนาดขั้นต่ำของหน้าต่าง
         self.setMinimumSize(800, 600)
-        
-        # ตั้งค่า window title และ icon
-        self.setWindowTitle("ExchangeUnsen")
+          # ตั้งค่า window title และ icon
+        self.setWindowTitle(f"{APP_CONFIG['name']} v{APP_CONFIG['version']}")
         
         # ตั้งค่า app icon
         icon_path = os.path.join(os.path.dirname(__file__), 'search-file.png')

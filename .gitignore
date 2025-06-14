@@ -24,14 +24,16 @@ venv/
 .Spotlight-V100
 .Trashes
 
-# PyInstaller Build Files
+# PyInstaller Build Files (ignore all except final exe)
 build/
 dist/
+!dist/ExchangeUnsen.exe
 *.spec
 *.log
 *.toc
 *.pyz
 *.exe
+!ExchangeUnsen.exe
 *.pkg
 
 # Excel/CSV temporary files
