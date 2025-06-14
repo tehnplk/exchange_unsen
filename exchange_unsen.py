@@ -16,6 +16,14 @@ from PyQt5.QtGui import QFont
 
 from ui_components import ExchangeUnsenUI
 
+# Import auto updater
+try:
+    from auto_updater import check_update_on_startup
+    AUTO_UPDATER_AVAILABLE = True
+except ImportError:
+    AUTO_UPDATER_AVAILABLE = False
+    print("Warning: auto_updater module not available")
+
 # Import configuration
 try:
     from config import (APP_CONFIG, FILE_CONFIG, UI_CONFIG, 
@@ -544,10 +552,16 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         self.setup_ui()
           # เชื่อมต่อ MySQL อัตโนมัติถ้าตั้งค่าไว้
         self.auto_connect_mysql()
-        
-        # ตั้งค่า tooltip เริ่มต้นสำหรับ status bar
+          # ตั้งค่า tooltip เริ่มต้นสำหรับ status bar
         if hasattr(self, 'statusbar'):
             self.statusbar.setToolTip("📊 แถบแสดงสถานะการทำงานของโปรแกรม")
+        
+        # ตรวจสอบการอัปเดตอัตโนมัติเมื่อเริ่มต้น (หลัง 3 วินาที)
+        if AUTO_UPDATER_AVAILABLE:
+            QTimer.singleShot(3000, self.check_for_updates_on_startup)
+        # ตรวจสอบการอัปเดตอัตโนมัติเมื่อเริ่มต้น
+        if AUTO_UPDATER_AVAILABLE:
+            check_update_on_startup()
         
     def setup_connections(self):
         """เชื่อมต่อ signals กับ functions"""        # ปุ่มต่างๆ
@@ -1574,6 +1588,33 @@ Version: 1.0
         
         # อัพเดท status ให้รู้ว่าทำการ resize แล้ว
         self.update_status(f"ปรับขนาดคอลัมน์ '{column_name}' เป็น {optimal_width}px")
+
+    def check_for_updates_on_startup(self):
+        """ตรวจสอบการอัปเดตเมื่อเริ่มต้นโปรแกรม"""
+        try:
+            if AUTO_UPDATER_AVAILABLE:
+                self.update_status("🔍 กำลังตรวจสอบการอัปเดต...")
+                # เรียกใช้ auto updater แบบ silent (ไม่แสดงข้อความเมื่อไม่มีอัปเดต)
+                check_update_on_startup(parent=self, silent=True)
+            else:
+                self.update_status("⚠️ ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
+                
+        except Exception as e:
+            print(f"Warning: ไม่สามารถตรวจสอบการอัปเดตได้: {e}")
+            self.update_status("พร้อมใช้งาน")
+    
+    def manual_check_updates(self):
+        """ตรวจสอบการอัปเดตด้วยตนเอง"""
+        try:
+            if AUTO_UPDATER_AVAILABLE:
+                self.update_status("🔍 กำลังตรวจสอบการอัปเดต...")
+                # เรียกใช้ auto updater แบบไม่ silent (แสดงข้อความเมื่อไม่มีอัปเดต)
+                check_update_on_startup(parent=self, silent=False)
+            else:
+                QMessageBox.warning(self, "ไม่พร้อมใช้งาน", "ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "ข้อผิดพลาด", f"ไม่สามารถตรวจสอบการอัปเดตได้:\n{str(e)}")
 
 def main():
     """ฟังก์ชันหลักสำหรับรันแอปพลิเคชัน"""
