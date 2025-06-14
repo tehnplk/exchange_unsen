@@ -598,22 +598,25 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         if os.path.exists(icon_path):
             app_icon = QtGui.QIcon(icon_path)
             self.setWindowIcon(app_icon)
-            
-        # ตั้งค่า table view
+              # ตั้งค่า table view
         self.tableView.setAlternatingRowColors(True)
         self.tableView.setSortingEnabled(True)
         self.tableView.setSelectionBehavior(QTableView.SelectRows)
           # ใช้ header แบบปกติเพื่อให้ชื่อคอลัมน์แสดงถูกต้อง
         header = self.tableView.horizontalHeader()
         header.setSortIndicatorShown(True)
-        header.setStretchLastSection(True)
+        header.setStretchLastSection(False)  # ปิดการ stretch column สุดท้าย
+        header.setSectionResizeMode(QHeaderView.Interactive)  # ให้ลาก resize ได้
         header.sectionClicked.connect(self.on_header_clicked)
         
         # เพิ่ม context menu สำหรับ header
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self.show_header_context_menu)
         
-        # เปิดใช้งาน mouse tracking และ tooltip สำหรับ header
+        # เพิ่ม double-click เพื่อ auto-resize column
+        header.sectionDoubleClicked.connect(self.auto_resize_column)
+        
+        # เพิ่ม mouse tracking สำหรับ header
         header.setMouseTracking(True)
         header.sectionEntered.connect(self.update_header_tooltip)
         
@@ -737,11 +740,12 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         self.current_data = data
         
         model = PandasModel(self.current_data)
-        self.tableView.setModel(model)
-        
-        # ตั้งค่า header 
+        self.tableView.setModel(model)        # ตั้งค่า header 
         header = self.tableView.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(QHeaderView.Interactive)  # ให้ลาก resize ได้
+        
+        # ตั้งค่าขนาดคอลัมน์เริ่มต้นให้เหมาะสม
+        self.setup_optimal_column_widths()
         
         # ตั้งค่า tooltip เริ่มต้นสำหรับ header
         self.setup_header_tooltips()
@@ -774,7 +778,7 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
 
     def _update_status_and_progress(self, message, progress_value=None, max_value=None):
         """อัปเดต status bar และ (ในอนาคต) progress bar"""
-        self.statusLabel.setText(f"สถานะ: {message}")
+        self.statusLabel.setText(message)
         # ส่วนของ QProgressBar จะเพิ่มทีหลังถ้าต้องการ
         # if progress_value is not None and max_value is not None and self.progressBar: # สมมติว่ามี self.progressBar
         #     self.progressBar.setMaximum(max_value)
@@ -872,14 +876,13 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             # ตรวจสอบให้แน่ใจว่าปุ่ม Browse ยังคงทำงานได้
             self.browseButton.setEnabled(True) # ปุ่ม Browse ควรทำงานได้เสมอ
             self.exportButton.setEnabled(False)
-            self.clearButton.setEnabled(False) # ปิดปุ่ม clear จนกว่าจะเลือกไฟล์ใหม่
-            self.searchPopulationButton.setEnabled(False)
+            self.clearButton.setEnabled(False) # ปิดปุ่ม clear จนกว่าจะเลือกไฟล์ใหม่            self.searchPopulationButton.setEnabled(False)
             
             self.update_status("ล้างข้อมูลเรียบร้อย - พร้อมใช้งาน")
             
     def update_status(self, message): # ฟังก์ชันนี้อาจจะไม่ถูกใช้โดยตรงแล้ว จะใช้ _update_status_and_progress แทน
         """อัพเดทสถานะ"""
-        self.statusLabel.setText(f"สถานะ: {message}")
+        self.statusLabel.setText(message)
     
     def show_about(self):
         """แสดงข้อมูลเกี่ยวกับแอปพลิเคชัน"""
@@ -1063,12 +1066,14 @@ Version: 1.0
         """Slot เมื่อ MySQLSearchThread ค้นหาข้อมูลเสร็จ"""
         self.current_data = updated_data
         model = PandasModel(self.current_data)
-        self.tableView.setModel(model)
-        
-        # ตั้งค่า header
+        self.tableView.setModel(model)        # ตั้งค่า header
         header = self.tableView.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeToContents)
-          # ตั้งค่า tooltip เริ่มต้นสำหรับ header
+        header.setSectionResizeMode(QHeaderView.Interactive)  # ให้ลาก resize ได้
+        
+        # ตั้งค่าขนาดคอลัมน์เริ่มต้นให้เหมาะสม
+        self.setup_optimal_column_widths()
+        
+        # ตั้งค่า tooltip เริ่มต้นสำหรับ header
         self.setup_header_tooltips()
         
         self._update_status_and_progress(f"เชื่อมโยงข้อมูลสำเร็จ - พบ {found_count} รายการ, ไม่พบ {not_found_count} รายการ")
@@ -1222,6 +1227,14 @@ Version: 1.0
             clear_filter_action.setToolTip("ยกเลิกการกรองสำหรับคอลัมน์นี้")
             
             menu.addSeparator()
+            
+            # เพิ่ม menu สำหรับการจัดการขนาดคอลัมน์
+            resize_action = menu.addAction(f"📏 ปรับขนาดคอลัมน์ '{column_name}' อัตโนมัติ")
+            resize_action.setToolTip("ปรับขนาดคอลัมน์ให้พอดีกับเนื้อหา")
+            
+            reset_all_widths_action = menu.addAction("📐 รีเซ็ตขนาดคอลัมน์ทั้งหมด")
+            reset_all_widths_action.setToolTip("คืนขนาดคอลัมน์ทั้งหมดเป็นค่าเริ่มต้น")
+            menu.addSeparator()
             clear_all_filters_action = menu.addAction("🗑️ ล้างการกรองทั้งหมด")
             clear_all_filters_action.setToolTip("ยกเลิกการกรองทุกคอลัมน์")
             
@@ -1231,6 +1244,11 @@ Version: 1.0
                 self.open_column_filter_dialog(logical_index)
             elif action == clear_filter_action:
                 self.clear_column_filter(logical_index)
+            elif action == resize_action:
+                self.auto_resize_column(logical_index)
+            elif action == reset_all_widths_action:
+                self.setup_optimal_column_widths()
+                self.update_status("รีเซ็ตขนาดคอลัมน์ทั้งหมดเรียบร้อยแล้ว")
             elif action == clear_all_filters_action:
                 self.clear_filters()
     
@@ -1511,6 +1529,52 @@ Version: 1.0
             result = "..." + os.sep + result
             
         return result
+
+    def setup_optimal_column_widths(self):
+        """ตั้งค่าขนาดคอลัมน์ให้เหมาะสมเมื่อเริ่มต้น"""
+        if self.current_data is None:
+            return
+            
+        header = self.tableView.horizontalHeader()
+        
+        # กำหนดขนาดเริ่มต้นตามเนื้อหา
+        for i in range(len(self.current_data.columns)):
+            # ขนาดตามชื่อคอลัมน์
+            header_width = len(str(self.current_data.columns[i])) * 10 + 20
+            
+            # ขนาดตามข้อมูลตัวอย่าง (5 แถวแรก)
+            sample_data = self.current_data.iloc[:5, i].astype(str)
+            max_content_width = max(len(str(val)) for val in sample_data) * 8 + 20
+            
+            # ใช้ค่าที่ใหญ่กว่า แต่จำกัดไม่เกิน 300px
+            optimal_width = min(max(header_width, max_content_width, 80), 300)
+            header.resizeSection(i, optimal_width)
+
+    def auto_resize_column(self, logical_index):
+        """Auto-resize column เมื่อ double-click ที่ header"""
+        if self.current_data is None:
+            return
+            
+        header = self.tableView.horizontalHeader()
+        
+        # คำนวณขนาดที่เหมาะสมจากข้อมูลทั้งหมดในคอลัมน์
+        column_name = self.current_data.columns[logical_index]
+        
+        # ขนาดจากชื่อคอลัมน์
+        header_width = len(str(column_name)) * 10 + 40
+        
+        # ขนาดจากข้อมูลในคอลัมน์ (ตัวอย่าง 50 แถวแรก เพื่อประสิทธิภาพ)
+        sample_size = min(50, len(self.current_data))
+        sample_data = self.current_data.iloc[:sample_size, logical_index].astype(str)
+        max_content_width = max(len(str(val)) for val in sample_data) * 8 + 40
+        
+        # ใช้ค่าที่ใหญ่กว่า แต่จำกัดไม่เกิน 400px
+        optimal_width = min(max(header_width, max_content_width, 100), 400)
+        
+        header.resizeSection(logical_index, optimal_width)
+        
+        # อัพเดท status ให้รู้ว่าทำการ resize แล้ว
+        self.update_status(f"ปรับขนาดคอลัมน์ '{column_name}' เป็น {optimal_width}px")
 
 def main():
     """ฟังก์ชันหลักสำหรับรันแอปพลิเคชัน"""
