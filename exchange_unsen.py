@@ -692,12 +692,13 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
                 "เลือกไฟล์ Excel",
-                "",
-                "Excel Files (*.xlsx *.xls);;All Files (*)"
+                "",                "Excel Files (*.xlsx *.xls);;All Files (*)"
             )
             
             if file_path:
-                self.current_file_path = file_path                # แสดง path แบบสั้นใน file path line edit
+                self.current_file_path = file_path
+                
+                # แสดง path แบบสั้นใน file path line edit
                 display_path = self.get_shortened_path(file_path)
                 self.filePathLineEdit.setText(display_path)
                 # แสดง full path ใน tooltip
@@ -709,14 +710,15 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
                 self.update_status(
                     f"เลือกไฟล์: {os.path.basename(file_path)} - กำลังเตรียมโหลด..."
                 )
-                  # โหลดข้อมูลอัตโนมัติหลัง delay 1 วินาที
+                
+                # โหลดข้อมูลอัตโนมัติหลัง delay 1 วินาที
                 QTimer.singleShot(1000, self.start_excel_load)
             else:
                 self.update_status("ยกเลิกการเลือกไฟล์")
                 
         except Exception as e:
-            QMessageBox.critical(
-                self, "ข้อผิดพลาด", 
+            self._critical_silent(
+                "ข้อผิดพลาด", 
                 f"เกิดข้อผิดพลาดในการเปิด dialog:\n{str(e)}"
             )
             self.update_status("เกิดข้อผิดพลาดในการเลือกไฟล์")
@@ -724,11 +726,11 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
     def start_excel_load(self): # เปลี่ยนชื่อจาก load_data
         """เริ่มการโหลดข้อมูลจากไฟล์ Excel โดยใช้ Thread"""
         if not self.current_file_path:
-            QMessageBox.warning(self, "คำเตือน", "กรุณาเลือกไฟล์ Excel ก่อน")
+            self._warning_silent("คำเตือน", "กรุณาเลือกไฟล์ Excel ก่อน")
             return
 
         if self.excel_loader_thread and self.excel_loader_thread.isRunning():
-            QMessageBox.information(self, "แจ้งเตือน", "กำลังโหลดข้อมูลอยู่ กรุณารอสักครู่")
+            self._info_silent("แจ้งเตือน", "กำลังโหลดข้อมูลอยู่ กรุณารอสักครู่")
             return
             
         # หยุดการกระพริบปุ่มโหลดข้อมูล
@@ -758,18 +760,18 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         
         # ตั้งค่าขนาดคอลัมน์เริ่มต้นให้เหมาะสม
         self.setup_optimal_column_widths()
-        
-        # ตั้งค่า tooltip เริ่มต้นสำหรับ header
+          # ตั้งค่า tooltip เริ่มต้นสำหรับ header
         self.setup_header_tooltips()
         
         self.exportButton.setEnabled(True)
-        self.clearButton.setEnabled(True) 
+        self.clearButton.setEnabled(True)
         
         self.show_column_selection()
         self.update_column_dropdown()
         
         rows, cols = self.current_data.shape
-        self._update_status_and_progress(f"โหลดข้อมูลสำเร็จ - {rows} แถว, {cols} คอลัมน์")
+        self._update_status_and_progress(f"โหลดข้อมูลสำเร็จ - {rows:,} แถว, {cols} คอลัมน์")
+        self._update_additional_info(f"📊 {os.path.basename(self.current_file_path) if self.current_file_path else 'ไฟล์'}", "info")
         
         # ไม่แสดง MessageBox เมื่อโหลดเสร็จ เพื่อให้ workflow ต่อเนื่อง
         # แสดงเฉพาะข้อมูลใน status bar เท่านั้น
@@ -782,7 +784,7 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
 
     def _on_excel_load_error(self, error_message):
         """Slot เมื่อ ExcelLoaderThread เกิดข้อผิดพลาด"""
-        QMessageBox.critical(self, "ข้อผิดพลาดในการโหลดไฟล์", error_message)
+        self._critical_silent("ข้อผิดพลาดในการโหลดไฟล์", error_message)
         self._update_status_and_progress(f"เกิดข้อผิดพลาดในการโหลดไฟล์: {error_message}")
         
         self.browseButton.setEnabled(True)
@@ -797,16 +799,84 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         #     self.progressBar.setValue(progress_value)        # elif self.progressBar:
         #     self.progressBar.setValue(0) # Reset progress bar if no specific progress
     
+    def _update_additional_info(self, message, info_type="info"):
+        """อัปเดต additional info label ด้วยข้อมูลเพิ่มเติม
+        
+        Args:
+            message (str): ข้อความที่จะแสดง
+            info_type (str): ประเภทข้อมูล ('info', 'success', 'warning', 'error')
+        """
+        if hasattr(self, 'additionalInfoLabel'):
+            self.additionalInfoLabel.setText(message)
+            
+            # เปลี่ยนสีตามประเภทข้อมูล
+            if info_type == "success":
+                style = """
+                QLabel {
+                    color: #2E7D32;
+                    padding: 5px;
+                    background-color: #E8F5E8;
+                    border: 1px solid #C8E6C9;
+                    border-radius: 3px;
+                    font-weight: bold;
+                }
+                """
+            elif info_type == "warning":
+                style = """
+                QLabel {
+                    color: #F57C00;
+                    padding: 5px;
+                    background-color: #FFF3E0;
+                    border: 1px solid #FFCC02;
+                    border-radius: 3px;
+                    font-weight: bold;
+                }
+                """
+            elif info_type == "error":
+                style = """
+                QLabel {
+                    color: #C62828;
+                    padding: 5px;
+                    background-color: #FFEBEE;
+                    border: 1px solid #E57373;
+                    border-radius: 3px;
+                    font-weight: bold;
+                }
+                """
+            else:  # info (default)
+                style = """
+                QLabel {
+                    color: #1976D2;
+                    padding: 5px;
+                    background-color: #E3F2FD;
+                    border: 1px solid #90CAF9;
+                    border-radius: 3px;
+                    font-weight: bold;
+                }
+                """
+            
+            self.additionalInfoLabel.setStyleSheet(style)
+    
+    def _hide_update_button(self):
+        """ซ่อน update button"""
+        if hasattr(self, 'updateButton'):
+            self.updateButton.setVisible(False)
+    
+    def _show_update_button(self):
+        """แสดง update button"""
+        if hasattr(self, 'updateButton'):
+            self.updateButton.setVisible(True)
+    
     def export_to_excel(self):
         """Export ข้อมูลที่กรองแล้วเป็นไฟล์ Excel"""
         if self.current_data is None:
-            QMessageBox.warning(self, "คำเตือน", "ไม่มีข้อมูลสำหรับ export")
+            self._warning_silent("คำเตือน", "ไม่มีข้อมูลสำหรับ export")
             return
         if self.excel_loader_thread and self.excel_loader_thread.isRunning():
-            QMessageBox.warning(self, "คำเตือน", "ไม่สามารถ export ได้ในขณะที่กำลังโหลดไฟล์อยู่")
+            self._warning_silent("คำเตือน", "ไม่สามารถ export ได้ในขณะที่กำลังโหลดไฟล์อยู่")
             return
         if self.mysql_search_thread and self.mysql_search_thread.isRunning():
-            QMessageBox.warning(self, "คำเตือน", "ไม่สามารถ export ได้ในขณะที่กำลังค้นหาข้อมูล")
+            self._warning_silent("คำเตือน", "ไม่สามารถ export ได้ในขณะที่กำลังค้นหาข้อมูล")
             return
             
         try:
@@ -820,10 +890,10 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
                 # fallback ไปใช้ข้อมูลต้นฉบับ
                 export_data = self.current_data.copy()
                 data_type = "ข้อมูลทั้งหมด"
-            
+                
             # ตรวจสอบว่ามีข้อมูลสำหรับ export หรือไม่
             if export_data.empty:
-                QMessageBox.warning(self, "คำเตือน", "ไม่มีข้อมูลสำหรับ export (อาจถูกกรองหมดแล้ว)")
+                self._warning_silent("คำเตือน", "ไม่มีข้อมูลสำหรับ export (อาจถูกกรองหมดแล้ว)")
                 return
             
             file_dialog = QFileDialog()
@@ -839,8 +909,7 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
                 with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
                     export_data.to_excel(writer, sheet_name='Data', index=False)
                 
-                QMessageBox.information(
-                    self, 
+                self._info_silent(
                     "สำเร็จ", 
                     f"Export {data_type} เป็น Excel สำเร็จ!\n\n"
                     f"ไฟล์: {os.path.basename(file_path)}\n"
@@ -848,23 +917,23 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
                     f"จำนวนคอลัมน์: {len(export_data.columns)} คอลัมน์"
                 )
                 self._update_status_and_progress(f"Export สำเร็จ: {os.path.basename(file_path)} ({len(export_data):,} แถว)")
+                self._update_additional_info(f"📁 {os.path.basename(file_path)}", "success")
                 
         except Exception as e:
             error_msg = f"เกิดข้อผิดพลาดในการ export:\n{str(e)}"
-            QMessageBox.critical(self, "ข้อผิดพลาด", error_msg)
+            self._critical_silent("ข้อผิดพลาด", error_msg)
             self._update_status_and_progress("เกิดข้อผิดพลาดในการ export")
             
     def clear_data(self):
         """ล้างข้อมูลทั้งหมด"""
         if self.excel_loader_thread and self.excel_loader_thread.isRunning():
-            QMessageBox.warning(self, "คำเตือน", "ไม่สามารถล้างข้อมูลได้ในขณะที่กำลังโหลดไฟล์อยู่")
+            self._warning_silent("คำเตือน", "ไม่สามารถล้างข้อมูลได้ในขณะที่กำลังโหลดไฟล์อยู่")
             return
         if self.mysql_search_thread and self.mysql_search_thread.isRunning():
-            QMessageBox.warning(self, "คำเตือน", "ไม่สามารถล้างข้อมูลได้ในขณะที่กำลังค้นหาข้อมูล")
+            self._warning_silent("คำเตือน", "ไม่สามารถล้างข้อมูลได้ในขณะที่กำลังค้นหาข้อมูล")
             return
 
-        reply = QMessageBox.question(
-            self, 
+        reply = self._question_silent(
             "ยืนยัน", 
             "คุณต้องการล้างข้อมูลทั้งหมดหรือไม่?",
             QMessageBox.Yes | QMessageBox.No,
@@ -884,12 +953,13 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             
             # ซ่อน column selection UI
             self.hide_column_selection()
-            
-            # ตรวจสอบให้แน่ใจว่าปุ่ม Browse ยังคงทำงานได้
+              # ตรวจสอบให้แน่ใจว่าปุ่ม Browse ยังคงทำงานได้
             self.browseButton.setEnabled(True) # ปุ่ม Browse ควรทำงานได้เสมอ
             self.exportButton.setEnabled(False)
-            self.clearButton.setEnabled(False) # ปิดปุ่ม clear จนกว่าจะเลือกไฟล์ใหม่            self.searchPopulationButton.setEnabled(False)
+            self.clearButton.setEnabled(False) # ปิดปุ่ม clear จนกว่าจะเลือกไฟล์ใหม่
+            self.searchPopulationButton.setEnabled(False)
             self.update_status("ล้างข้อมูลเรียบร้อย - พร้อมใช้งาน")
+            self._update_additional_info("", "info")  # ล้าง additional info
             
     def update_status(self, message): # ฟังก์ชันนี้อาจจะไม่ถูกใช้โดยตรงแล้ว จะใช้ _update_status_and_progress แทน
         """อัพเดทสถานะ"""
@@ -937,33 +1007,37 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         }
         """)
         main_layout.addWidget(version_label)
-        
-        # ข้อมูลอัปเดต (ถ้ามี)
+          # ข้อมูลอัปเดต (ถ้ามี และ version_code ใหม่สูงกว่า current)
+        show_update_info = False
         if self.update_available_data:
-            latest_version = self.update_available_data.get('version_name', 'unknown')
-            update_info = f"""🆕 เวอร์ชันใหม่พร้อมใช้งาน: {latest_version}
+            latest_version_code = self.update_available_data.get('version_code', 0)
+            current_version_code = APP_CONFIG.get('version_code', 103)
+            
+            if latest_version_code > current_version_code:
+                show_update_info = True
+                latest_version = self.update_available_data.get('version_name', 'unknown')
+                update_info = f"""🆕 เวอร์ชันใหม่พร้อมใช้งาน: {latest_version}
 รหัสเวอร์ชัน: {self.update_available_data.get('version_code', 0)}
 วันที่ปล่อย: {self.update_available_data.get('release', 'N/A')}"""
-            
-            update_label = QLabel(update_info)
-            update_label.setAlignment(Qt.AlignCenter)
-            update_label.setStyleSheet("""
-            QLabel {
-                background-color: #E8F5E8;
-                color: #2E7D32;
-                padding: 10px;
-                border: 2px solid #4CAF50;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            """)
-            main_layout.addWidget(update_label)
+                
+                update_label = QLabel(update_info)
+                update_label.setAlignment(Qt.AlignCenter)
+                update_label.setStyleSheet("""
+                QLabel {
+                    background-color: #E8F5E8;
+                    color: #2E7D32;
+                    padding: 10px;
+                    border: 2px solid #4CAF50;
+                    border-radius: 5px;
+                    font-weight: bold;
+                }
+                """)
+                main_layout.addWidget(update_label)
         
         # Layout สำหรับปุ่ม
         button_layout = QHBoxLayout()
-        
-        # ปุ่ม Update (แสดงเฉพาะเมื่อมีอัปเดต)
-        if self.update_available_data:
+          # ปุ่ม Update (แสดงเฉพาะเมื่อมีอัปเดต และ version_code ใหม่สูงกว่า current)
+        if show_update_info:
             update_button = QPushButton("🔄 อัปเดตเลย")
             update_button.setMinimumHeight(40)
             update_button.setStyleSheet("""
@@ -1006,8 +1080,7 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         button_layout.addWidget(close_button)
         
         main_layout.addLayout(button_layout)
-        
-        # แสดง dialog
+          # แสดง dialog
         about_dialog.exec_()
     
     def start_update_from_dialog(self, dialog):
@@ -1018,9 +1091,9 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
                 updater = AutoUpdater(parent=self)
                 updater.check_for_updates(silent=False)
             except Exception as e:
-                QMessageBox.critical(self, "ข้อผิดพลาด", f"ไม่สามารถเริ่มการอัปเดตได้:\n{str(e)}")
+                self._critical_silent("ข้อผิดพลาด", f"ไม่สามารถเริ่มการอัปเดตได้:\n{str(e)}")
         else:
-            QMessageBox.warning(self, "ไม่พร้อมใช้งาน", "ระบบอัปเดตไม่พร้อมใช้งาน")
+            self._warning_silent("ไม่พร้อมใช้งาน", "ระบบอัปเดตไม่พร้อมใช้งาน")
     
     def auto_connect_mysql(self):
         """เชื่อมต่อ MySQL อัตโนมัติถ้าตั้งค่าไว้"""
@@ -1036,12 +1109,13 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
                     self.update_status(f"เชื่อมต่อ MySQL สำเร็จ - {message}")
                 else:
                     self.update_status(f"ไม่สามารถเชื่อมต่อ MySQL ได้ - {message}")
-        except Exception as e:            self.update_status(f"ข้อผิดพลาดในการเชื่อมต่อ MySQL: {str(e)}")
+        except Exception as e:
+            self.update_status(f"ข้อผิดพลาดในการเชื่อมต่อ MySQL: {str(e)}")
     
     def open_mysql_settings(self):
         """เปิด dialog ตั้งค่า MySQL"""
         if not MySQLConfigDialog:
-            QMessageBox.warning(self, "คำเตือน", "ไม่พบ MySQL configuration module")
+            self._warning_silent("คำเตือน", "ไม่พบ MySQL configuration module")
             return
             
         dialog = MySQLConfigDialog(self)
@@ -1055,15 +1129,15 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
     def connect_mysql(self):
         """เชื่อมต่อ MySQL"""
         if not self.mysql_connection:
-            QMessageBox.warning(self, "คำเตือน", "ไม่พบ MySQL connection module")
+            self._warning_silent("คำเตือน", "ไม่พบ MySQL connection module")
             return
             
         success, message = self.mysql_connection.connect()
         if success:
-            QMessageBox.information(self, "สำเร็จ", f"เชื่อมต่อ MySQL สำเร็จ\n{message}")
+            self._info_silent("สำเร็จ", f"เชื่อมต่อ MySQL สำเร็จ\n{message}")
             self.update_status("เชื่อมต่อ MySQL แล้ว")
         else:
-            QMessageBox.critical(self, "ข้อผิดพลาด", f"ไม่สามารถเชื่อมต่อ MySQL ได้\n{message}")
+            self._critical_silent("ข้อผิดพลาด", f"ไม่สามารถเชื่อมต่อ MySQL ได้\n{message}")
             self.update_status("เชื่อมต่อ MySQL ไม่สำเร็จ")
     
     def disconnect_mysql(self):
@@ -1073,10 +1147,10 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             
         if self.mysql_connection.is_connected():
             self.mysql_connection.disconnect()
-            QMessageBox.information(self, "สำเร็จ", "ตัดการเชื่อมต่อ MySQL แล้ว")
+            self._info_silent("สำเร็จ", "ตัดการเชื่อมต่อ MySQL แล้ว")
             self.update_status("ตัดการเชื่อมต่อ MySQL แล้ว")
         else:
-            QMessageBox.information(self, "แจ้งเตือน", "ไม่ได้เชื่อมต่อ MySQL อยู่")
+            self._info_silent("แจ้งเตือน", "ไม่ได้เชื่อมต่อ MySQL อยู่")
 
     def show_column_selection(self):
         """แสดง UI สำหรับเลือกคอลัมน์"""
@@ -1131,26 +1205,26 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             self.searchPopulationButton.setEnabled(False)
         else: # กรณี current_data is None
             self.searchPopulationButton.setEnabled(False)
-
+    
     def start_mysql_search(self):
         """เริ่มการเชื่อมโยงข้อมูลกับฐานข้อมูล MySQL โดยใช้ Thread"""
         if self.current_data is None:
-            QMessageBox.warning(self, "คำเตือน", "กรุณาโหลดข้อมูล Excel ก่อน")
+            self._warning_silent("คำเตือน", "กรุณาโหลดข้อมูล Excel ก่อน")
             return
 
         # ตรวจสอบการเชื่อมต่อฐานข้อมูลก่อนทำงานอื่นๆ
         if not self.mysql_connection or not self.mysql_connection.is_connected():
-            QMessageBox.warning(self, "คำเตือน", "กรุณาเชื่อมต่อฐานข้อมูลก่อน")
+            self._warning_silent("คำเตือน", "กรุณาเชื่อมต่อฐานข้อมูลก่อน")
             self.searchPopulationButton.setEnabled(False)
             return
 
         selected_column = self.columnComboBox.currentText()
         if not selected_column or selected_column == "-- ไม่เลือกคอลัมน์ --":
-            QMessageBox.warning(self, "คำเตือน", "กรุณาเลือกคอลัมน์สำหรับค้นหา")
+            self._warning_silent("คำเตือน", "กรุณาเลือกคอลัมน์สำหรับค้นหา")
             return
 
         if self.mysql_search_thread and self.mysql_search_thread.isRunning():
-            QMessageBox.information(self, "แจ้งเตือน", "กำลังค้นหาข้อมูลอยู่ กรุณารอสักครู่")
+            self._info_silent("แจ้งเตือน", "กำลังค้นหาข้อมูลอยู่ กรุณารอสักครู่")
             return
         
         # ปิดการใช้งาน UI elements
@@ -1190,6 +1264,11 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
         
         self._update_status_and_progress(f"เชื่อมโยงข้อมูลสำเร็จ - พบ {found_count} รายการ, ไม่พบ {not_found_count} รายการ")
         
+        # แสดงสถิติการค้นหาใน additional info
+        total_records = found_count + not_found_count
+        success_rate = (found_count / total_records * 100) if total_records > 0 else 0
+        self._update_additional_info(f"🔍 {success_rate:.1f}% match ({found_count}/{total_records})", "success" if success_rate >= 80 else "warning")
+        
         # ไม่แสดง MessageBox เพื่อให้ workflow ต่อเนื่อง
         # แสดงผลลัพธ์เฉพาะใน status bar เท่านั้น
         
@@ -1216,7 +1295,7 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
 
     def _on_mysql_search_error(self, error_message):
         """Slot เมื่อ MySQLSearchThread เกิดข้อผิดพลาด"""
-        QMessageBox.critical(self, "ข้อผิดพลาดในการเชื่อมโยงข้อมูล", error_message)
+        self._critical_silent("ข้อผิดพลาดในการเชื่อมโยงข้อมูล", error_message)
         self._update_status_and_progress(f"เกิดข้อผิดพลาดในการเชื่อมโยงข้อมูล: {error_message}")
         
         # เปิดการใช้งาน UI elements (เหมือนใน _on_mysql_search_finished)
@@ -1253,13 +1332,27 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             # อัปเดตสถานะ
             if active_filters:
                 filter_count = len(active_filters)
+                # อัปเดต main status
                 self._update_status_and_progress(f"✅ กรองข้อมูล: แสดง {current_rows}/{total_rows} แถว ({filter_count} คอลัมน์มีการกรอง)")
-                  # ไม่แสดง popup เพื่อให้ workflow ต่อเนื่อง
+                
+                # อัปเดต additional info ด้วยข้อมูลการกรอง
+                self._update_additional_info(f"🔍 กรอง: {current_rows}/{total_rows} แถว", "info")
+                
+                # ไม่แสดง popup เพื่อให้ workflow ต่อเนื่อง
                 # แสดงเฉพาะข้อมูลใน status bar เท่านั้น
                 self.last_filter_time = time.time()
             else:
                 rows, cols = self.current_data.shape
                 self._update_status_and_progress(f"📊 แสดงข้อมูลทั้งหมด: {rows} แถว, {cols} คอลัมน์")
+                  # ล้าง additional info เมื่อไม่มีการกรอง (เว้นแต่มี update notification ที่ version_code สูงกว่า)
+                has_valid_update = False
+                if hasattr(self, 'update_available_data') and self.update_available_data:
+                    latest_version_code = self.update_available_data.get('version_code', 0)
+                    current_version_code = APP_CONFIG.get('version_code', 103)
+                    has_valid_update = latest_version_code > current_version_code
+                
+                if not has_valid_update:
+                    self._update_additional_info("", "info")
 
     def clear_filters(self):
         """ล้าง filter ทั้งหมด"""
@@ -1311,6 +1404,9 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             QPushButton:hover {
                 background-color: #F57C00;
                 border-color: #E65100;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
             }
             """
             
@@ -1525,14 +1621,13 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
     def on_table_double_clicked(self, index):
         """จัดการเมื่อมีการ Double Click ที่แถวข้อมูล"""
         if not index.isValid() or self.current_data is None:
-            return
-        # เรียกใช้ฟังก์ชันตรวจสอบข้อมูลโดยส่งลำดับแถวที่คลิก
+            return        # เรียกใช้ฟังก์ชันตรวจสอบข้อมูลโดยส่งลำดับแถวที่คลิก
         self.check_row_data(index.row())
-    
+
     def check_row_data(self, row):
         """ตรวจสอบข้อมูลในแถวที่เลือก"""
         if self.current_data is None or row < 0 or row >= len(self.current_data):
-            QMessageBox.warning(self, "คำเตือน", "ไม่สามารถตรวจสอบข้อมูลได้")
+            self._warning_silent("คำเตือน", "ไม่สามารถตรวจสอบข้อมูลได้")
             return
             
         # ดึงข้อมูลจากแถวที่เลือก
@@ -1708,10 +1803,10 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
                 updater = AutoUpdater(parent=self)
                 updater.check_for_updates(silent=False)
             else:
-                QMessageBox.warning(self, "ไม่พร้อมใช้งาน", "ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
+                self._warning_silent("ไม่พร้อมใช้งาน", "ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
                 
         except Exception as e:
-            QMessageBox.critical(self, "ข้อผิดพลาด", f"ไม่สามารถตรวจสอบการอัปเดตได้:\n{str(e)}")
+            self._critical_silent("ข้อผิดพลาด", f"ไม่สามารถตรวจสอบการอัปเดตได้:\n{str(e)}")
     
     def check_for_updates_background(self):
         """ตรวจสอบการอัปเดตแบบเบื้องหลัง (ไม่แสดง popup)"""
@@ -1724,33 +1819,113 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
                 print("⚠️ ระบบตรวจสอบอัปเดตไม่พร้อมใช้งาน")
         except Exception as e:
             print(f"Warning: ไม่สามารถตรวจสอบการอัปเดตได้: {e}")
-    
-    def on_update_available(self, version_data):
-        """เมื่อพบเวอร์ชันใหม่ - แสดงการแจ้งเตือนที่ status bar"""
-        self.update_available_data = version_data
-        latest_version = version_data.get('version_name', 'unknown')
-        version_code = version_data.get('version_code', 0)
-        
-        # อัปเดตสถานะให้แสดงข้อความแจ้งเตือน
-        update_message = f"🚀 มีเวอร์ชันใหม่ {latest_version} (รหัส: {version_code}) - คลิก 'เกี่ยวกับ' เพื่ออัปเดต"
-        self.update_status(update_message)
-        
-        # เปลี่ยนสีสถานะให้เด่นขึ้น (สีส้มสะดุดตา)
-        self.statusLabel.setStyleSheet("""
-        QLabel {
-            color: #FF6600;
-            padding: 8px;
-            background-color: #FFF3E0;
-            border: 2px solid #FF9800;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 12px;
-        }
-        """)
-        
-        # เก็บข้อมูลเวอร์ชันไว้สำหรับการอัปเดต
-        print(f"🆕 Found new version: {latest_version} (current: {APP_CONFIG.get('version', '1.0.0')})")
 
+    def on_update_available(self, version_data):
+        """เมื่อพบเวอร์ชันใหม่ - แสดงการแจ้งเตือนที่ additional info label และ update button"""
+        latest_version = version_data.get('version_name', 'unknown')
+        latest_version_code = version_data.get('version_code', 0)
+        current_version_code = APP_CONFIG.get('version_code', 103)
+        current_version = APP_CONFIG.get('version', '1.0.3')
+        
+        # ตรวจสอบว่า version_code ใหม่สูงกว่า current หรือไม่
+        if latest_version_code > current_version_code:
+            # บันทึกข้อมูล version ใหม่
+            self.update_available_data = version_data
+            
+            # แสดงการแจ้งเตือนที่ additional info label (override การแสดงผลอื่นๆ)
+            self._update_additional_info(f"🚀 v{latest_version} พร้อม", "warning")
+            
+            # แสดง update button
+            self._show_update_button()
+            
+            # เชื่อมต่อ update button กับฟังก์ชัน manual_check_updates
+            if hasattr(self, 'updateButton'):
+                # ลบ connection เก่าก่อน (ถ้ามี)
+                try:
+                    self.updateButton.clicked.disconnect()
+                except:
+                    pass
+                # เชื่อมต่อใหม่
+                self.updateButton.clicked.connect(self.manual_check_updates)
+            
+            # แสดงข้อความใน console
+            print(f"🆕 Found new version: {latest_version} (version_code: {latest_version_code}) > current: {current_version} (version_code: {current_version_code})")
+        else:
+            # ไม่มี update หรือ version_code เก่ากว่า/เท่ากับ current
+            print(f"ℹ️ No update needed: latest version_code {latest_version_code} <= current {current_version_code}")
+            # ซ่อน update button ถ้าแสดงอยู่
+            self._hide_update_button()
+            # ล้าง update data
+            self.update_available_data = None
+
+    def _show_silent_message(self, parent, icon, title, text, buttons=None, default_button=None):
+        """แสดง MessageBox แบบไม่มีเสียง
+        
+        Args:
+            parent: Parent widget
+            icon: Icon type (Information, Warning, Critical, Question)
+            title: Title ของ dialog
+            text: ข้อความที่จะแสดง
+            buttons: Buttons (สำหรับ question dialog)
+            default_button: Default button
+        
+        Returns:
+            ผลลัพธ์การคลิกปุ่ม (สำหรับ question dialog)
+        """
+        msg = QMessageBox(parent)
+        msg.setIcon(icon)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        
+        # ปิดเสียงโดยการ override sound
+        try:
+            import winsound
+            # สำหรับ Windows - ปิดเสียง system
+            original_beep = winsound.Beep
+            winsound.Beep = lambda freq, duration: None
+        except ImportError:
+            # สำหรับ OS อื่น ๆ
+            pass
+        
+        if buttons:
+            msg.setStandardButtons(buttons)
+        if default_button:
+            msg.setDefaultButton(default_button)
+        
+        result = msg.exec_()
+        
+        # คืนค่า beep function เดิม
+        try:
+            winsound.Beep = original_beep
+        except:
+            pass
+        
+        return result
+    
+    def _info_silent(self, title, text):
+        """แสดง Information MessageBox แบบไม่มีเสียง"""
+        self._show_silent_message(self, QMessageBox.Information, title, text)
+    
+    def _warning_silent(self, title, text):
+        """แสดง Warning MessageBox แบบไม่มีเสียง"""
+        self._show_silent_message(self, QMessageBox.Warning, title, text)
+    
+    def _critical_silent(self, title, text):
+        """แสดง Critical MessageBox แบบไม่มีเสียง"""
+        self._show_silent_message(self, QMessageBox.Critical, title, text)
+    
+    def _question_silent(self, title, text, buttons=None, default_button=None):
+        """แสดง Question MessageBox แบบไม่มีเสียง"""
+        if buttons is None:
+            buttons = QMessageBox.Yes | QMessageBox.No
+        if default_button is None:
+            default_button = QMessageBox.No
+        return self._show_silent_message(self, QMessageBox.Question, title, text, buttons, default_button)
+    
+    def check_for_updates(self):
+        """Alias สำหรับ manual_check_updates เพื่อ backward compatibility"""
+        return self.manual_check_updates()
+    
 
 def main():
     """ฟังก์ชันหลักสำหรับรันแอปพลิเคชัน"""

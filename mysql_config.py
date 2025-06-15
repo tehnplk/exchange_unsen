@@ -268,24 +268,55 @@ class MySQLConfigDialog(QDialog):
         else:
             self.result_text.setPlainText(f"❌ {message}")
             self.result_text.setStyleSheet("color: red;")
+    
+    def _show_silent_message(self, parent, icon, title, text, buttons=None, default_button=None):
+        """แสดง message box แบบไม่มีเสียง"""
+        msg = QMessageBox(parent)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        msg.setIcon(icon)
+        
+        if buttons:
+            msg.setStandardButtons(buttons)
+        else:
+            msg.setStandardButtons(QMessageBox.Ok)
+            
+        if default_button:
+            msg.setDefaultButton(default_button)
+            
+        # ปิดเสียง
+        msg.setWindowFlag(Qt.WindowStaysOnTopHint, False)
+        
+        return msg.exec_()
+    
+    def _info_silent(self, title, text):
+        """แสดง information message แบบไม่มีเสียง"""
+        self._show_silent_message(self, QMessageBox.Information, title, text)
+    
+    def _warning_silent(self, title, text):
+        """แสดง warning message แบบไม่มีเสียง"""
+        self._show_silent_message(self, QMessageBox.Warning, title, text)
+    
+    def _critical_silent(self, title, text):
+        """แสดง critical message แบบไม่มีเสียง"""
+        self._show_silent_message(self, QMessageBox.Critical, title, text)
             
     def save_config(self):
         """บันทึกการตั้งค่า"""
         config = self.get_current_config()
-        
-        # ตรวจสอบข้อมูลที่จำเป็น
+          # ตรวจสอบข้อมูลที่จำเป็น
         if not all([config['host'], config['database'], config['username']]):
-            QMessageBox.warning(self, "คำเตือน", 
+            self._warning_silent("คำเตือน", 
                               "กรุณากรอกข้อมูลให้ครบถ้วน (Host, Database, Username)")
             return
         
         # บันทึกลง registry
         if MySQLConfigManager.save_config(config):
-            QMessageBox.information(self, "สำเร็จ", 
+            self._info_silent("สำเร็จ", 
                                   "บันทึกการตั้งค่าเรียบร้อยแล้ว")
             self.accept()
         else:
-            QMessageBox.critical(self, "ข้อผิดพลาด", 
+            self._critical_silent("ข้อผิดพลาด", 
                                "ไม่สามารถบันทึกการตั้งค่าได้")
 
 

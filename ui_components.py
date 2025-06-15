@@ -271,13 +271,16 @@ class ExchangeUnsenUI(QMainWindow):
         }
         QPushButton:disabled {
             background-color: #CCCCCC;
-            color: #666666;
-        }
+            color: #666666;        }
         """
         self.exportButton.setStyleSheet(export_style)
-        
+    
     def setup_status_label(self):
-        """ตั้งค่า status label"""
+        """ตั้งค่า status label และ additional info label"""
+        # สร้าง horizontal layout สำหรับ status area
+        self.statusLayout = QHBoxLayout()
+        
+        # Status label หลัก (ความกว้าง 70%)
         self.statusLabel = QLabel("สถานะ: พร้อมใช้งาน", self.centralwidget)
         font = QFont()
         font.setPointSize(10)
@@ -293,7 +296,53 @@ class ExchangeUnsenUI(QMainWindow):
         }
         """
         self.statusLabel.setStyleSheet(status_style)
-        self.verticalLayout.addWidget(self.statusLabel)
+        
+        # Additional info label ใหม่ (ความกว้าง 30%)
+        self.additionalInfoLabel = QLabel("", self.centralwidget)
+        self.additionalInfoLabel.setFont(font)
+        
+        additional_style = """
+        QLabel {
+            color: #2E7D32;
+            padding: 5px;
+            background-color: #E8F5E8;
+            border: 1px solid #C8E6C9;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        """
+        self.additionalInfoLabel.setStyleSheet(additional_style)
+          # เพิ่ม labels และ update button ลงใน horizontal layout
+        self.statusLayout.addWidget(self.statusLabel, 70)  # 70% ความกว้าง
+        self.statusLayout.addWidget(self.additionalInfoLabel, 25)  # 25% ความกว้าง
+        
+        # เพิ่ม Update button สำหรับการอัปเดท (5% ความกว้าง)
+        self.updateButton = QPushButton("อัปเดท", self.centralwidget)
+        self.updateButton.setFont(font)
+        self.updateButton.setVisible(False)  # ซ่อนไว้ก่อน จะแสดงเมื่อมี update
+        
+        update_button_style = """
+        QPushButton {
+            color: white;
+            background-color: #1976D2;
+            border: 1px solid #1565C0;
+            border-radius: 3px;
+            padding: 5px 10px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #1565C0;
+        }
+        QPushButton:pressed {
+            background-color: #0D47A1;
+        }
+        """
+        self.updateButton.setStyleSheet(update_button_style)
+        
+        self.statusLayout.addWidget(self.updateButton, 5)  # 5% ความกว้าง
+        
+        # เพิ่ม horizontal layout ลงใน main vertical layout
+        self.verticalLayout.addLayout(self.statusLayout)
         
     def setup_table_view(self):
         """ตั้งค่า table view"""
