@@ -32,9 +32,8 @@ build/
 *.toc
 *.pyz
 *.exe
-!ExchangeUnsen*.exe
 !dist/
-!dist/*
+!dist/*.exe
 *.pkg
 
 # Excel/CSV temporary files
