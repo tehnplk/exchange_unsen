@@ -34,6 +34,7 @@ build/
 *.exe
 !ExchangeUnsen.exe
 !ExchangeUnsen101.exe
+!ExchangeUnsen102.exe
 !dist/
 !dist/*
 *.pkg
