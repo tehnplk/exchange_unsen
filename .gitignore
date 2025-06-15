@@ -33,6 +33,7 @@ build/
 *.pyz
 *.exe
 !ExchangeUnsen.exe
+!ExchangeUnsen101.exe
 !dist/
 !dist/*
 *.pkg
