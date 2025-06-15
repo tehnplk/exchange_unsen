@@ -20,10 +20,12 @@ if %ERRORLEVEL% EQU 0 (
     echo ========================================
     echo.
     echo Press any key to exit...
-    pause >nul
+    timeout /t 10 /nobreak >nul
+    exit
 ) else (
     echo.
     echo [ERROR] Build failed!
     echo ========================================
-    pause
+    timeout /t 10 /nobreak >nul
+    exit
 )

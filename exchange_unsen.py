@@ -468,6 +468,9 @@ class PandasModel(QAbstractTableModel):
         if index.isValid():
             if role == Qt.DisplayRole:
                 value = self._data.iloc[index.row(), index.column()]
+                # จัดการ NaN และ None ให้แสดงเป็นค่าว่าง
+                if pd.isna(value) or value is None:
+                    return ""
                 return str(value)
             elif role == Qt.FontRole:
                 # สร้าง font แบบ bold สำหรับข้อมูลในตาราง
