@@ -32,9 +32,7 @@ build/
 *.toc
 *.pyz
 *.exe
-!ExchangeUnsen.exe
-!ExchangeUnsen101.exe
-!ExchangeUnsen102.exe
+!ExchangeUnsen*.exe
 !dist/
 !dist/*
 *.pkg
