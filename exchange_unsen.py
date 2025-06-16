@@ -62,18 +62,36 @@ class FilterDialog(QDialog):
             f"ใส่คำที่ต้องการค้นหาในคอลัมน์ '{self.column_name}':"
         )
         layout.addWidget(info_label)
-        
-        # Line edit สำหรับใส่เงื่อนไขการกรอง
+          # Line edit สำหรับใส่เงื่อนไขการกรอง
         self.filter_input = QLineEdit()
         self.filter_input.setText(self.filter_text)
         self.filter_input.setPlaceholderText(
-            "เช่น: ABC, 123, หรือเว้นว่างเพื่อแสดงทั้งหมด"
+            "เช่น: ABC, 123, <empty> สำหรับค่าว่าง หรือเว้นว่างเพื่อแสดงทั้งหมด"
         )
         layout.addWidget(self.filter_input)
         
+        # เพิ่มปุ่มสำหรับตัวเลือกทั่วไป
+        quick_filter_layout = QHBoxLayout()
+        
+        empty_button = QPushButton("กรองค่าว่าง")
+        empty_button.setToolTip("กรองเฉพาะแถวที่มีค่าว่างในคอลัมน์นี้ และปิด dialog")
+        empty_button.clicked.connect(self.apply_empty_filter)
+        empty_button.setMaximumWidth(100)
+        
+        clear_button = QPushButton("ล้างกรอง")
+        clear_button.setToolTip("แสดงข้อมูลทั้งหมด")
+        clear_button.clicked.connect(lambda: self.filter_input.setText(""))
+        clear_button.setMaximumWidth(80)
+        
+        quick_filter_layout.addWidget(empty_button)
+        quick_filter_layout.addWidget(clear_button)
+        quick_filter_layout.addStretch()
+        
+        layout.addLayout(quick_filter_layout)
+        
         # Label สำหรับคำอธิบายการใช้งาน
         help_label = QLabel(
-            "หมายเหตุ: การค้นหาจะใช้รูปแบบ 'LIKE' (ค้นหาข้อความที่มีคำนี้อยู่)"
+            "หมายเหตุ: การค้นหาจะใช้รูปแบบ 'LIKE' (ค้นหาข้อความที่มีคำนี้อยู่)\nใช้ <empty> เพื่อค้นหาค่าว่าง"
         )
         help_label.setStyleSheet("color: gray; font-size: 11px;")
         layout.addWidget(help_label)
@@ -91,6 +109,11 @@ class FilterDialog(QDialog):
         # Focus ที่ input field
         self.filter_input.setFocus()
         self.filter_input.selectAll()
+        
+    def apply_empty_filter(self):
+        """ใช้ filter สำหรับค่าว่างและปิด dialog"""
+        self.filter_input.setText("<empty>")
+        self.accept()  # ปิด dialog และส่งผลลัพธ์เป็น Accepted
         
     def getFilterText(self):
         """ส่งคืนข้อความที่ใส่ใน filter"""
@@ -316,13 +339,8 @@ class MySQLSearchThread(QThread):
             found_count = 0
             not_found_count = 0
             total_rows = len(self.data)
-            
-            # แมปคอลัมน์
-            column_mapping = {
-                'pid': 'person_id',
-                'cid': 'cid', 
-                'hn': 'patient_hn'
-            }
+              # แมปคอลัมน์โดยใช้ข้อมูลจาก profile ปัจจุบัน
+            column_mapping = self.mysql_connection.get_column_mapping()
             db_column = column_mapping[self.selected_column]
             
             # เพิ่มคอลัมน์ผลลัพธ์
@@ -331,21 +349,25 @@ class MySQLSearchThread(QThread):
             self.data['fname_found'] = ''
             self.data['lname_found'] = ''
             self.data['hn_found'] = ''
+              # เตรียมข้อมูลตาราง
+            table_name = self.mysql_connection.get_person_table_name()
+            columns = self.mysql_connection.get_person_query_columns()
             
-            self.progress.emit("เริ่มค้นหาข้อมูลใน MySQL...", 0, total_rows)
+            self.progress.emit(f"เริ่มค้นหาข้อมูลใน MySQL ({self.mysql_connection.profile})...", 0, total_rows)
             
             # ค้นหาทีละแถว
             for idx, row in self.data.iterrows():
                 if self.isInterruptionRequested():
                     break
-                    
+                
                 search_value = row[self.selected_column]
                 if pd.isna(search_value):
                     continue
                 
                 try:
-                    # Query ข้อมูลจาก MySQL
-                    query = f"SELECT person_id, cid, fname, lname, patient_hn FROM person WHERE {db_column} = %s LIMIT 1"
+                    # Query ข้อมูลจาก MySQL ตาม profile ที่กำลังใช้งาน
+                    query = f"SELECT {','.join(columns)} FROM {table_name} WHERE {db_column} = %s LIMIT 1"
+                    print(query)
                     cursor = self.mysql_connection.connection.cursor()
                     cursor.execute(query, (str(search_value),))
                     result = cursor.fetchone()
@@ -420,12 +442,20 @@ class PandasModel(QAbstractTableModel):
         for column_index, filter_value in filters.items():
             if filter_value and column_index < len(filtered_data.columns):
                 column_name = filtered_data.columns[column_index]
-                # กรองข้อมูลโดยใช้ LIKE search (ค้นหาข้อความที่มีคำที่ระบุ)
-                filtered_data = filtered_data[
-                    filtered_data[column_name].astype(str).str.contains(
-                        str(filter_value), case=False, na=False
-                    )
-                ]
+                
+                # ตรวจสอบว่าเป็นการกรองค่าว่างหรือไม่
+                if filter_value == "<empty>":
+                    # กรองเฉพาะแถวที่มีค่าว่าง
+                    filtered_data = filtered_data[
+                        filtered_data[column_name].isna() | (filtered_data[column_name] == "")
+                    ]
+                else:
+                    # กรองข้อมูลโดยใช้ LIKE search (ค้นหาข้อความที่มีคำที่ระบุ)
+                    filtered_data = filtered_data[
+                        filtered_data[column_name].astype(str).str.contains(
+                            str(filter_value), case=False, na=False
+                        )
+                    ]
         
         self._data = filtered_data.reset_index(drop=True)
         self._filters = filters
@@ -441,8 +471,10 @@ class PandasModel(QAbstractTableModel):
             # ลบ filter สำหรับคอลัมน์นี้
             self._filters.pop(column_index, None)
         
-        # ใช้ filter ทั้งหมด
+        # ใช้ filter ทั้งหมดกับข้อมูล
         self.applyFilters(self._filters)
+        
+        self.layoutChanged.emit()
     
     def getColumnFilter(self, column_index):
         """ส่งคืน filter ปัจจุบันของคอลัมน์"""
@@ -1437,6 +1469,9 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             clear_filter_action = menu.addAction(f"🚫 ล้างการกรองคอลัมน์ '{column_name}'")
             clear_filter_action.setToolTip("ยกเลิกการกรองสำหรับคอลัมน์นี้")
             
+            clear_all_filters_action = menu.addAction("🗑️ ล้างการกรองทั้งหมด")
+            clear_all_filters_action.setToolTip("ยกเลิกการกรองทุกคอลัมน์")
+            
             menu.addSeparator()
             
             # เพิ่ม menu สำหรับการจัดการขนาดคอลัมน์
@@ -1445,9 +1480,6 @@ class ExchangeUnsenApp(ExchangeUnsenUI):
             
             reset_all_widths_action = menu.addAction("📐 รีเซ็ตขนาดคอลัมน์ทั้งหมด")
             reset_all_widths_action.setToolTip("คืนขนาดคอลัมน์ทั้งหมดเป็นค่าเริ่มต้น")
-            menu.addSeparator()
-            clear_all_filters_action = menu.addAction("🗑️ ล้างการกรองทั้งหมด")
-            clear_all_filters_action.setToolTip("ยกเลิกการกรองทุกคอลัมน์")
             
             action = menu.exec_(header.mapToGlobal(position))
             

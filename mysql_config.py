@@ -9,7 +9,7 @@ import mysql.connector
 from typing import Dict, Optional, Tuple
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, 
                              QLineEdit, QSpinBox, QPushButton, QLabel, 
-                             QMessageBox, QCheckBox, QGroupBox, QTextEdit)
+                             QMessageBox, QCheckBox, QGroupBox, QTextEdit, QComboBox)
 from PyQt5.QtCore import Qt, QLocale
 from PyQt5.QtGui import QFont, QIcon
 
@@ -18,6 +18,28 @@ class MySQLConfigManager:
     """จัดการการตั้งค่า MySQL ใน Registry"""
     
     REGISTRY_KEY = r"SOFTWARE\ExcelReaderApp"
+    
+    # เพิ่ม default config สำหรับแต่ละ profile
+    PROFILE_CONFIGS = {
+        'HOSXP': {
+            'host': 'localhost',
+            'port': '3306',
+            'database': 'hosxp_pcu',
+            'username': 'sa',
+            'password': '',
+            'auto_connect': 'false',
+            'profile': 'HOSXP'
+        },
+        'JHCIS': {
+            'host': 'localhost',
+            'port': '3333',
+            'database': 'jhcisdb',
+            'username': 'root',
+            'password': '',
+            'auto_connect': 'false',
+            'profile': 'JHCIS'
+        }
+    }
     
     @staticmethod
     def save_config(config: Dict[str, str]) -> bool:
@@ -46,7 +68,8 @@ class MySQLConfigManager:
             'database': 'hos',
             'username': '',
             'password': '',
-            'auto_connect': 'false'
+            'auto_connect': 'false',
+            'profile': 'HOSXP'
         }
         
         try:
@@ -126,6 +149,17 @@ class MySQLConfigDialog(QDialog):
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
         
+        # Profile selection
+        profile_group = QGroupBox("เลือก Profile HIS")
+        profile_layout = QFormLayout(profile_group)
+        
+        self.profile_combo = QComboBox()
+        self.profile_combo.addItems(['HOSXP', 'JHCIS'])
+        self.profile_combo.currentTextChanged.connect(self.on_profile_changed)
+        profile_layout.addRow("ระบบ HIS:", self.profile_combo)
+        
+        layout.addWidget(profile_group)
+        
         # กลุ่มการตั้งค่าการเชื่อมต่อ
         connection_group = QGroupBox("ข้อมูลการเชื่อมต่อ")
         connection_layout = QFormLayout(connection_group)
@@ -133,7 +167,9 @@ class MySQLConfigDialog(QDialog):
         # Host
         self.host_edit = QLineEdit()
         self.host_edit.setPlaceholderText("localhost หรือ IP Address")
-        connection_layout.addRow("Host:", self.host_edit)        # Port
+        connection_layout.addRow("Host:", self.host_edit)
+        
+        # Port
         self.port_spin = QSpinBox()
         self.port_spin.setRange(1, 65535)
         self.port_spin.setValue(3306)
@@ -151,10 +187,11 @@ class MySQLConfigDialog(QDialog):
         self.username_edit = QLineEdit()
         self.username_edit.setPlaceholderText("ชื่อผู้ใช้")
         connection_layout.addRow("Username:", self.username_edit)
-          # Password
+        
+        # Password
         self.password_edit = QLineEdit()
         # ไม่ใช้ EchoMode.Password เพื่อให้แสดงข้อความปกติ
-        self.password_edit.setEchoMode(QLineEdit.Normal)
+        self.password_edit.setEchoMode(QLineEdit.Password)
         self.password_edit.setPlaceholderText("รหัสผ่าน")
         connection_layout.addRow("Password:", self.password_edit)
         
@@ -228,14 +265,32 @@ class MySQLConfigDialog(QDialog):
         button_layout.addWidget(cancel_button)
         layout.addLayout(button_layout)
         
+    def on_profile_changed(self, profile: str):
+        """จัดการเมื่อมีการเปลี่ยน profile"""
+        # โหลดค่า default ของ profile ที่เลือก
+        default_config = MySQLConfigManager.PROFILE_CONFIGS[profile]
+        
+        # อัพเดต UI
+        self.host_edit.setText(default_config['host'])
+        self.port_spin.setValue(int(default_config['port']))
+        self.database_edit.setText(default_config['database'])
+        self.username_edit.setText(default_config['username'])
+        self.password_edit.setText(default_config['password'])
+        self.auto_connect_check.setChecked(default_config['auto_connect'].lower() == 'true')
+    
     def load_current_config(self):
-        """โหลดการตั้งค่าปัจจุบันลง UI"""
+        """โหลดการตั้งค่าปัจจุบัน"""
+        # ตั้งค่า profile ถ้ามี
+        current_profile = self.config.get('profile', 'HOSXP')
+        self.profile_combo.setCurrentText(current_profile)
+        
+        # โหลดค่าที่บันทึกไว้ หรือใช้ค่า default ถ้าไม่มี
         self.host_edit.setText(self.config.get('host', 'localhost'))
         self.port_spin.setValue(int(self.config.get('port', '3306')))
-        self.database_edit.setText(self.config.get('database', 'hos'))
+        self.database_edit.setText(self.config.get('database', ''))
         self.username_edit.setText(self.config.get('username', ''))
         self.password_edit.setText(self.config.get('password', ''))
-        self.auto_connect_check.setChecked(self.config.get('auto_connect', 'false') == 'true')
+        self.auto_connect_check.setChecked(self.config.get('auto_connect', 'false').lower() == 'true')
         
     def get_current_config(self) -> Dict[str, str]:
         """ดึงการตั้งค่าปัจจุบันจาก UI"""
@@ -245,7 +300,8 @@ class MySQLConfigDialog(QDialog):
             'database': self.database_edit.text().strip(),
             'username': self.username_edit.text().strip(),
             'password': self.password_edit.text(),
-            'auto_connect': 'true' if self.auto_connect_check.isChecked() else 'false'
+            'auto_connect': 'true' if self.auto_connect_check.isChecked() else 'false',
+            'profile': self.profile_combo.currentText()
         }
         
     def test_connection(self):
@@ -303,21 +359,23 @@ class MySQLConfigDialog(QDialog):
             
     def save_config(self):
         """บันทึกการตั้งค่า"""
-        config = self.get_current_config()
-          # ตรวจสอบข้อมูลที่จำเป็น
-        if not all([config['host'], config['database'], config['username']]):
-            self._warning_silent("คำเตือน", 
-                              "กรุณากรอกข้อมูลให้ครบถ้วน (Host, Database, Username)")
-            return
+        # รวบรวมข้อมูลการตั้งค่า
+        config = {
+            'host': self.host_edit.text(),
+            'port': str(self.port_spin.value()),
+            'database': self.database_edit.text(),
+            'username': self.username_edit.text(),
+            'password': self.password_edit.text(),
+            'auto_connect': str(self.auto_connect_check.isChecked()).lower(),
+            'profile': self.profile_combo.currentText()
+        }
         
-        # บันทึกลง registry
+        # บันทึกลง Registry
         if MySQLConfigManager.save_config(config):
-            self._info_silent("สำเร็จ", 
-                                  "บันทึกการตั้งค่าเรียบร้อยแล้ว")
+            QMessageBox.information(self, "สำเร็จ", "บันทึกการตั้งค่าเรียบร้อยแล้ว")
             self.accept()
         else:
-            self._critical_silent("ข้อผิดพลาด", 
-                               "ไม่สามารถบันทึกการตั้งค่าได้")
+            QMessageBox.warning(self, "ผิดพลาด", "ไม่สามารถบันทึกการตั้งค่าได้")
 
 
 class MySQLConnection:
@@ -326,6 +384,7 @@ class MySQLConnection:
     def __init__(self):
         self.connection = None
         self.config = MySQLConfigManager.load_config()
+        self.profile = self.config.get('profile', 'HOSXP')  # เก็บ profile ที่กำลังใช้งาน (HOSXP หรือ JHCIS)
         
     def connect(self) -> Tuple[bool, str]:
         """เชื่อมต่อฐานข้อมูล"""
@@ -342,6 +401,9 @@ class MySQLConnection:
                 connection_timeout=10
             )
             
+            # อัพเดท profile ปัจจุบันจาก config
+            self.profile = self.config.get('profile', 'HOSXP')
+            
             return True, "เชื่อมต่อสำเร็จ"
             
         except mysql.connector.Error as e:
@@ -357,29 +419,37 @@ class MySQLConnection:
     def is_connected(self) -> bool:
         """ตรวจสอบสถานะการเชื่อมต่อ"""
         return self.connection and self.connection.is_connected()
-        
-    def execute_query(self, query: str) -> Tuple[bool, any]:
-        """ดำเนินการ query"""
-        try:
-            if not self.is_connected():
-                success, message = self.connect()
-                if not success:
-                    return False, message
+    
+    def get_person_table_name(self) -> str:
+        """คืนค่าชื่อตาราง person ตาม profile ที่กำลังใช้งาน"""
+        if self.profile == 'JHCIS':
+            return 'person'
+        else:  # HOSXP
+            return 'person'
+    
+    def get_column_mapping(self) -> Dict[str, str]:
+        """คืนค่า mapping ของคอลัมน์ตาม profile ที่กำลังใช้งาน"""
+        if self.profile == 'JHCIS':
+            # JHCIS: ใช้ pid, idcard ในตาราง person
+            return {
+                'pid': 'pid',
+                'cid': 'idcard',
+                'hn': 'pid'  # JHCIS ใช้ pid แทน hn
+            }
+        else:  # HOSXP
+            # HOSXP: ใช้ person_id, cid, fname, lname, patient_hn ในตาราง person
+            return {
+                'pid': 'person_id',
+                'cid': 'cid',
+                'fname': 'fname',
+                'lname': 'lname',
+                'hn': 'patient_hn'
+            }
             
-            cursor = self.connection.cursor()
-            cursor.execute(query)
-            
-            if query.strip().upper().startswith('SELECT'):
-                result = cursor.fetchall()
-                columns = [desc[0] for desc in cursor.description]
-                cursor.close()
-                return True, (result, columns)
-            else:
-                self.connection.commit()
-                cursor.close()
-                return True, "Query executed successfully"
-                
-        except mysql.connector.Error as e:
-            return False, f"MySQL Error: {str(e)}"
-        except Exception as e:
-            return False, f"Error: {str(e)}"
+    def get_person_query_columns(self):
+        if self.profile == "HOSXP":
+            return ["person_id", "cid", "fname", "lname", "patient_hn"]
+        elif self.profile == "JHCIS":
+            return ["pid", "idcard", "fname", "lname", "pid"]
+        else:
+            raise ValueError("Unsupported profile")
